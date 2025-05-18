@@ -9,13 +9,13 @@ class TaikoDrum(GameBase):
         self.font = pygame.font.SysFont(None, 36)
         self.notes = []
         self.score = 0
-        self.judge_x = 110  # 判定區向左移
+        self.judge_x = 110
         self.combo = 0
         self.current_group = -1
         self.group_notes = []
         self.group_note_idx = 0
         self.group_start_time = 0
-        self.group_interval = 2000  # 每組持續時間(ms)
+        self.group_interval = 2000
 
         # 載入音效
         self.adrum_sound = pygame.mixer.Sound("Adrum.mp3")
@@ -26,9 +26,32 @@ class TaikoDrum(GameBase):
         self.ldrum_channel = pygame.mixer.Channel(2)
         self.wrong_channel = pygame.mixer.Channel(3)
 
-        # 載入並縮放背景圖片
+        # 載入圖片
         bg_img = pygame.image.load("taiko_drum_bgi.png").convert()
         self.background = pygame.transform.scale(bg_img, self.screen.get_size())
+        self.a_circle = pygame.transform.scale(
+            pygame.image.load('A_circle.png').convert_alpha(), (100, 100)
+        )
+        self.l_circle = pygame.transform.scale(
+            pygame.image.load('L_circle.png').convert_alpha(), (100, 100)
+        )
+        self.a_miss = pygame.transform.scale(
+            pygame.image.load('A_miss.png').convert_alpha(), (100, 100)
+        )
+        self.l_miss = pygame.transform.scale(
+            pygame.image.load('L_miss.png').convert_alpha(), (100, 100)
+        )
+        # 載入miss banner
+        self.a_miss_banner = pygame.transform.scale(
+            pygame.image.load('A_miss_banner.png').convert_alpha(), (200, 80)
+        )
+        self.l_miss_banner = pygame.transform.scale(
+            pygame.image.load('L_miss_banner.png').convert_alpha(), (200, 80)
+        )
+        self.black_miss_banner = pygame.transform.scale(
+            pygame.image.load('black_miss_banner.png').convert_alpha(), (200, 80)
+        )
+        self.miss_banner = None  # (img, show_until_time)
 
     def start_new_group(self):
         note_count = random.choice([2, 4, 6])
@@ -53,23 +76,33 @@ class TaikoDrum(GameBase):
             self.current_group = group
             self.start_new_group()
 
-        # 檢查是否要產生新音符
+        # 產生新音符
         while (self.group_note_idx < len(self.group_notes) and
                now - self.group_start_time >= self.group_notes[self.group_note_idx][0] * 1000):
             note_type = self.group_notes[self.group_note_idx][1]
-            self.notes.append({'x': 800, 'type': note_type, 'hit': False})
+            self.notes.append({'x': 800, 'type': note_type, 'hit': False, 'miss': False})
             self.group_note_idx += 1
 
         missed = False
         for note in self.notes:
             note['x'] -= 5
-            if not note['hit'] and note['x'] < self.judge_x - 30:
+            if not note['hit'] and not note['miss'] and note['x'] < self.judge_x - 30:
+                note['miss'] = True
                 missed = True
+                # 顯示miss banner
+                if note['type'] == 'left':
+                    self.miss_banner = (self.a_miss_banner, now + 500)
+                else:
+                    self.miss_banner = (self.l_miss_banner, now + 500)
         if missed:
             self.combo = 0
             self.wrong_channel.play(self.wrong_sound)
 
         self.notes = [n for n in self.notes if n['x'] > 0 and not n['hit']]
+
+        # miss banner自動消失
+        if self.miss_banner and now > self.miss_banner[1]:
+            self.miss_banner = None
 
     def handle_event(self, event):
         global current_game
@@ -80,7 +113,7 @@ class TaikoDrum(GameBase):
         if event.type == pygame.KEYDOWN and (event.key == pygame.K_a or event.key == pygame.K_l):
             hit = False
             for note in self.notes:
-                if not note['hit'] and abs(note['x'] - self.judge_x) < 30:
+                if not note['hit'] and not note['miss'] and abs(note['x'] - self.judge_x) < 30:
                     if note['type'] == 'left' and event.key == pygame.K_a:
                         note['hit'] = True
                         self.combo += 1
@@ -108,13 +141,34 @@ class TaikoDrum(GameBase):
             if not hit:
                 self.combo = 0
                 self.wrong_channel.play(self.wrong_sound)
+                now = pygame.time.get_ticks()
+                # 判斷是否有音符在判定區但按錯
+                miss_type = None
+                for note in self.notes:
+                    if not note['hit'] and not note['miss'] and abs(note['x'] - self.judge_x) < 30:
+                        miss_type = note['type']
+                        break
+                if miss_type == 'left':
+                    self.miss_banner = (self.a_miss_banner, now + 500)
+                elif miss_type == 'right':
+                    self.miss_banner = (self.l_miss_banner, now + 500)
+                else:
+                    self.miss_banner = (self.black_miss_banner, now + 500)
 
     def render(self):
         self.screen.blit(self.background, (0, 0))
-        # 判定區方框已移除
         for note in self.notes:
-            color = (255, 0, 0) if note['type'] == 'left' else (0, 0, 255)
-            pygame.draw.circle(self.screen, color, (int(note['x']), 300), 30)
+            if note['type'] == 'left':
+                img = self.a_miss if note['miss'] else self.a_circle
+            else:
+                img = self.l_miss if note['miss'] else self.l_circle
+            rect = img.get_rect(center=(int(note['x']), 300))
+            self.screen.blit(img, rect)
+        # 顯示miss banner
+        if self.miss_banner:
+            banner_img = self.miss_banner[0]
+            banner_rect = banner_img.get_rect(center=(self.judge_x, 200))
+            self.screen.blit(banner_img, banner_rect)
         score_text = self.font.render(f"Score: {self.score}", True, (255, 255, 0))
         self.screen.blit(score_text, (10, 10))
         if self.combo > 1:
