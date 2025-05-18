@@ -20,14 +20,14 @@ class TaikoDrum(GameBase):
         # 載入音效
         self.adrum_sound = pygame.mixer.Sound("Adrum.mp3")
         self.ldrum_sound = pygame.mixer.Sound("Ldrum.mp3")
-        self.wrong_sound = pygame.mixer.Sound("wrong.mp3")
+        self.wrong_sound = pygame.mixer.Sound("Wrong.mp3")
         self.wrong_sound.set_volume(0.1)
         self.adrum_channel = pygame.mixer.Channel(1)
         self.ldrum_channel = pygame.mixer.Channel(2)
         self.wrong_channel = pygame.mixer.Channel(3)
 
         # 載入並縮放背景圖片
-        bg_img = pygame.image.load("taiko_drum_back.png").convert()
+        bg_img = pygame.image.load("taiko_drum_bgi.png").convert()
         self.background = pygame.transform.scale(bg_img, self.screen.get_size())
 
     def start_new_group(self):
