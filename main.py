@@ -8,7 +8,7 @@ screen = pygame.display.set_mode((800, 600))
 clock = pygame.time.Clock()
 
 games = {
-    "Whac-A-Mole": WhacAMole(screen),
+    "Whac-A-Mole": WhacAMole(),
     "Taiko Drum": TaikoDrum(screen),
     "12-Key Piano": Piano12Keys(screen)
 }
