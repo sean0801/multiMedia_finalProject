@@ -2,6 +2,7 @@ import pygame
 from whac_a_mole import WhacAMole
 from taiko_drum import TaikoDrum
 from piano_12keys import Piano12Keys
+import cv2
 
 pygame.init()
 screen = pygame.display.set_mode((800, 600))
@@ -55,6 +56,7 @@ def main_loop():
                 if current_game:
                     current_game.handle_event(event)
 
+        cv2.waitKey(1)
         clock.tick(30)
 
 if __name__ == "__main__":
