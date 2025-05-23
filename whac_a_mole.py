@@ -89,6 +89,15 @@ class WhacAMole(GameBase):
             img = cv2.resize(img, size, interpolation=cv2.INTER_AREA)
         return img
 
+    def draw_button(self, frame, text, rect, hover):
+        x, y, w, h = rect
+        color = (200, 200, 255) if hover else (255, 255, 255)
+        cv2.rectangle(frame, (x, y), (x + w, y + h), color, -1)
+        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+        text_x = x + (w - text_size[0]) // 2
+        text_y = y + (h + text_size[1]) // 2
+        cv2.putText(frame, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+
     def rotate_image(self, image, angle):
         (h, w) = image.shape[:2]
         center = (w // 2, h // 2)
@@ -106,21 +115,35 @@ class WhacAMole(GameBase):
             return
 
         if self.state == "select_mode":
-            if 400 <= x <= 600 and 300 <= y <= 360:
-                self.mode = GameMode.DIFFICULTY
-                self.state = "select_difficulty"
-            elif 400 <= x <= 600 and 400 <= y <= 460:
-                self.mode = GameMode.TIMER
-                self.countdown_start = time.time()
-                self.state = "countdown"
+            button_width, button_height = 300, 60
+            spacing = 40
+            labels = ["Difficulty", "Timer"]
+            for i, label in enumerate(labels):
+                x = (1152 - button_width) // 2
+                y = 250 + i * (button_height + spacing)
+                if x <= self.mouse_x <= x + button_width and y <= self.mouse_y <= y + button_height:
+                    if label == "Difficulty":
+                        self.mode = GameMode.DIFFICULTY
+                        self.state = "select_difficulty"
+                    elif label == "Timer":
+                        self.mode = GameMode.TIMER
+                        self.countdown_start = time.time()
+                        self.state = "countdown"
 
         elif self.state == "select_difficulty":
-            if 400 <= x <= 600 and 300 <= y <= 360:
-                self.difficulty = Difficulty.EASY
-            elif 400 <= x <= 600 and 400 <= y <= 460:
-                self.difficulty = Difficulty.HARD
-            self.countdown_start = time.time()
-            self.state = "countdown"
+            button_width, button_height = 300, 60
+            spacing = 40
+            labels = ["Easy", "Hard"]
+            for i, label in enumerate(labels):
+                x = (1152 - button_width) // 2
+                y = 250 + i * (button_height + spacing)
+                if x <= self.mouse_x <= x + button_width and y <= self.mouse_y <= y + button_height:
+                    if label == "Easy":
+                        self.difficulty = Difficulty.EASY
+                    elif label == "Hard":
+                        self.difficulty = Difficulty.HARD
+                    self.countdown_start = time.time()
+                    self.state = "countdown"
 
         elif self.state == "game":
             self.hammer_swinging = True
@@ -195,16 +218,47 @@ class WhacAMole(GameBase):
         frame = self.background.copy()
 
         if self.state == "select_mode":
-            cv2.rectangle(frame, (400, 300), (600, 360), (255, 255, 255), -1)
-            cv2.putText(frame, "Difficulty", (410, 345), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
-            cv2.rectangle(frame, (400, 400), (600, 460), (255, 255, 255), -1)
-            cv2.putText(frame, "Timer", (440, 445), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+            button_width, button_height = 300, 60
+            spacing = 40
+            labels = ["Difficulty", "Timer"]
+            for i, label in enumerate(labels):
+                x = (1152 - button_width) // 2
+                y = 250 + i * (button_height + spacing)
+                hover = x <= self.mouse_x <= x + button_width and y <= self.mouse_y <= y + button_height
+                color = (200, 200, 255) if hover else (255, 255, 255)
+                cv2.rectangle(frame, (x, y), (x + button_width, y + button_height), color, -1)
+                text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+                text_x = x + (button_width - text_size[0]) // 2
+                text_y = y + (button_height + text_size[1]) // 2
+                cv2.putText(frame, label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+
 
         elif self.state == "select_difficulty":
-            cv2.rectangle(frame, (400, 300), (600, 360), (255, 255, 255), -1)
-            cv2.putText(frame, "Easy", (450, 345), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
-            cv2.rectangle(frame, (400, 400), (600, 460), (255, 255, 255), -1)
-            cv2.putText(frame, "Hard", (450, 445), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+
+            button_width, button_height = 300, 60
+
+            spacing = 40
+
+            labels = ["Easy", "Hard"]
+
+            for i, label in enumerate(labels):
+                x = (1152 - button_width) // 2
+
+                y = 250 + i * (button_height + spacing)
+
+                hover = x <= self.mouse_x <= x + button_width and y <= self.mouse_y <= y + button_height
+
+                color = (200, 200, 255) if hover else (255, 255, 255)
+
+                cv2.rectangle(frame, (x, y), (x + button_width, y + button_height), color, -1)
+
+                text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+
+                text_x = x + (button_width - text_size[0]) // 2
+
+                text_y = y + (button_height + text_size[1]) // 2
+
+                cv2.putText(frame, label, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
 
         elif self.state == "countdown":
             seconds = int(5 - (time.time() - self.countdown_start))
