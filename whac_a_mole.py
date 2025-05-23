@@ -73,6 +73,26 @@ class WhacAMole(GameBase):
                 'hit': False
             })
 
+    def draw_rounded_rect(self, img, top_left, bottom_right, radius, color, thickness=-1):
+        x1, y1 = top_left
+        x2, y2 = bottom_right
+        if thickness < 0:
+            overlay = img.copy()
+            cv2.rectangle(overlay, (x1 + radius, y1), (x2 - radius, y2), color, -1)
+            cv2.rectangle(overlay, (x1, y1 + radius), (x2, y2 - radius), color, -1)
+            cv2.circle(overlay, (x1 + radius, y1 + radius), radius, color, -1)
+            cv2.circle(overlay, (x2 - radius, y1 + radius), radius, color, -1)
+            cv2.circle(overlay, (x1 + radius, y2 - radius), radius, color, -1)
+            cv2.circle(overlay, (x2 - radius, y2 - radius), radius, color, -1)
+            cv2.addWeighted(overlay, 1, img, 0, 0, img)
+        else:
+            cv2.rectangle(img, (x1 + radius, y1), (x2 - radius, y2), color, thickness)
+            cv2.rectangle(img, (x1, y1 + radius), (x2, y2 - radius), color, thickness)
+            cv2.ellipse(img, (x1 + radius, y1 + radius), (radius, radius), 180, 0, 90, color, thickness)
+            cv2.ellipse(img, (x2 - radius, y1 + radius), (radius, radius), 270, 0, 90, color, thickness)
+            cv2.ellipse(img, (x1 + radius, y2 - radius), (radius, radius), 90, 0, 90, color, thickness)
+            cv2.ellipse(img, (x2 - radius, y2 - radius), (radius, radius), 0, 0, 90, color, thickness)
+
     def generate_positions(self):
         return [
             (250, 180), (576, 180), (900, 180),
@@ -263,7 +283,7 @@ class WhacAMole(GameBase):
                 y = 250 + i * (button_height + spacing)
                 hover = x <= self.mouse_x <= x + button_width and y <= self.mouse_y <= y + button_height
                 color = (200, 200, 255) if hover else (255, 255, 255)
-                cv2.rectangle(frame, (x, y), (x + button_width, y + button_height), color, -1)
+                self.draw_rounded_rect(frame, (x, y), (x + button_width, y + button_height), 20, color)
                 text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
                 text_x = x + (button_width - text_size[0]) // 2
                 text_y = y + (button_height + text_size[1]) // 2
@@ -287,11 +307,11 @@ class WhacAMole(GameBase):
 
                 color = (200, 200, 255) if hover else (255, 255, 255)
 
-                cv2.rectangle(frame, (x, y), (x + button_width, y + button_height), color, -1)
+                self.draw_rounded_rect(frame, (x, y), (x + button_width, y + button_height), 20, color)
                 back_x, back_y, back_w, back_h = 50, 50, 120, 50
                 hover = back_x <= self.mouse_x <= back_x + back_w and back_y <= self.mouse_y <= back_y + back_h
                 color = (200, 200, 255) if hover else (255, 255, 255)
-                cv2.rectangle(frame, (back_x, back_y), (back_x + back_w, back_y + back_h), color, -1)
+                self.draw_rounded_rect(frame, (back_x, back_y), (back_x + back_w, back_y + back_h), 20, color)
                 text_size = cv2.getTextSize("Back", cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
                 text_x = back_x + (back_w - text_size[0]) // 2
                 text_y = back_y + (back_h + text_size[1]) // 2
@@ -353,7 +373,7 @@ class WhacAMole(GameBase):
             back_x, back_y, back_w, back_h = 50, 50, 120, 50
             hover = back_x <= self.mouse_x <= back_x + back_w and back_y <= self.mouse_y <= back_y + back_h
             color = (200, 200, 255) if hover else (255, 255, 255)
-            cv2.rectangle(frame, (back_x, back_y), (back_x + back_w, back_y + back_h), color, -1)
+            self.draw_rounded_rect(frame, (back_x, back_y), (back_x + back_w, back_y + back_h), 20, color)
             text_size = cv2.getTextSize("Back", cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
             text_x = back_x + (back_w - text_size[0]) // 2
             text_y = back_y + (back_h + text_size[1]) // 2
