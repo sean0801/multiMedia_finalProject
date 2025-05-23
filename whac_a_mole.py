@@ -50,6 +50,7 @@ class WhacAMole(GameBase):
         self.mole_img = self.load_image("mole.png", (150, 150))
         self.background = self.load_image("background.jpg", (1152, 768), color=(80, 80, 80))
         self.hammer_img = self.load_image("hammer.png", (100, 100))
+        self.heart_img = self.load_image("heart.png", (40, 40))
         self.hammer_swinging = False
         self.hammer_swing_time = 0
         self.mouse_x, self.mouse_y = 0, 0
@@ -113,6 +114,9 @@ class WhacAMole(GameBase):
         self.mouse_x, self.mouse_y = x, y
         if event != cv2.EVENT_LBUTTONDOWN:
             return
+        if 50 <= self.mouse_x <= 170 and 50 <= self.mouse_y <= 100:
+            self.state = "select_mode"
+            return
 
         if self.state == "select_mode":
             button_width, button_height = 300, 60
@@ -128,6 +132,10 @@ class WhacAMole(GameBase):
                     elif label == "Timer":
                         self.mode = GameMode.TIMER
                         self.countdown_start = time.time()
+                        for mole in self.moles:
+                            mole['state'] = MoleState.HIDDEN
+
+                        self.countdown_start = time.time()
                         self.state = "countdown"
 
         elif self.state == "select_difficulty":
@@ -142,22 +150,51 @@ class WhacAMole(GameBase):
                         self.difficulty = Difficulty.EASY
                     elif label == "Hard":
                         self.difficulty = Difficulty.HARD
+
+                    # reset game state
+                    self.score = 0
+                    self.lives = 3
+                    self.victory = False
+                    for mole in self.moles:
+                        mole['state'] = MoleState.HIDDEN
+
                     self.countdown_start = time.time()
                     self.state = "countdown"
+
+        elif self.state == "end":
+            # 檢查是否點擊「返回鍵」
+            if 50 <= self.mouse_x <= 170 and 50 <= self.mouse_y <= 100:
+                self.state = "select_mode"
+                self.score = 0
+                self.lives = 3
+                for mole in self.moles:
+                    mole['state'] = MoleState.HIDDEN
 
         elif self.state == "game":
             self.hammer_swinging = True
             self.hammer_swing_time = pygame.time.get_ticks()
             for mole in self.moles:
-                if mole['state'] == MoleState.FULL:
+                if mole['state'] in (MoleState.FULL, MoleState.DISAPPEARING, MoleState.APPEARING):
+                    # 計算目前地鼠露出高度區域
                     x0, y0 = mole['pos']
-                    h, w = self.mole_img.shape[:2]
+                    now = pygame.time.get_ticks()
+                    progress = (now - mole['start']) / self.mole_anim_duration
+                    if mole['state'] == MoleState.APPEARING:
+                        ratio = min(progress, 1.0)
+                    elif mole['state'] == MoleState.DISAPPEARING:
+                        ratio = max(1.0 - progress, 0.0)
+                    else:
+                        ratio = 1.0
+                    full_h = self.mole_img.shape[0]
+                    visible_h = int(full_h * ratio)
+                    h, w = visible_h, self.mole_img.shape[1]
                     rect = pygame.Rect(x0 - w // 2, y0 - h, w, h)
-                    if rect.collidepoint(x, y):
+                    if rect.collidepoint(self.mouse_x, self.mouse_y) and not mole['hit']:
                         self.score += 1
                         mole['hit'] = True
-                        mole['state'] = MoleState.DISAPPEARING
-                        mole['start'] = pygame.time.get_ticks()
+                        if mole['state'] != MoleState.DISAPPEARING:
+                            mole['state'] = MoleState.DISAPPEARING
+                            mole['start'] = pygame.time.get_ticks()
                         if self.mole_hit_sound:
                             self.mole_hit_sound.play()
 
@@ -251,7 +288,14 @@ class WhacAMole(GameBase):
                 color = (200, 200, 255) if hover else (255, 255, 255)
 
                 cv2.rectangle(frame, (x, y), (x + button_width, y + button_height), color, -1)
-
+                back_x, back_y, back_w, back_h = 50, 50, 120, 50
+                hover = back_x <= self.mouse_x <= back_x + back_w and back_y <= self.mouse_y <= back_y + back_h
+                color = (200, 200, 255) if hover else (255, 255, 255)
+                cv2.rectangle(frame, (back_x, back_y), (back_x + back_w, back_y + back_h), color, -1)
+                text_size = cv2.getTextSize("Back", cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+                text_x = back_x + (back_w - text_size[0]) // 2
+                text_y = back_y + (back_h + text_size[1]) // 2
+                cv2.putText(frame, "Back", (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
                 text_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
 
                 text_x = x + (button_width - text_size[0]) // 2
@@ -294,7 +338,10 @@ class WhacAMole(GameBase):
                 remaining = int(self.duration - (time.time() - self.start_time))
                 cv2.putText(frame, f"Time: {remaining}", (20, 90), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 3)
             else:
-                cv2.putText(frame, f"Lives: {self.lives}", (20, 90), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 3)
+                for i in range(self.lives):
+                    x = 20 + i * 50  # 每顆愛心間距 50px
+                    y = 50
+                    frame = self.overlay_image(frame, self.heart_img, (x, y))
 
         elif self.state == "end":
             if self.mode == GameMode.DIFFICULTY and self.victory:
@@ -302,6 +349,15 @@ class WhacAMole(GameBase):
             else:
                 cv2.putText(frame, "Game Over", (420, 350), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
             cv2.putText(frame, f"Score: {self.score}", (450, 420), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 3)
+            # 返回鍵動畫（與選單一致）
+            back_x, back_y, back_w, back_h = 50, 50, 120, 50
+            hover = back_x <= self.mouse_x <= back_x + back_w and back_y <= self.mouse_y <= back_y + back_h
+            color = (200, 200, 255) if hover else (255, 255, 255)
+            cv2.rectangle(frame, (back_x, back_y), (back_x + back_w, back_y + back_h), color, -1)
+            text_size = cv2.getTextSize("Back", cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+            text_x = back_x + (back_w - text_size[0]) // 2
+            text_y = back_y + (back_h + text_size[1]) // 2
+            cv2.putText(frame, "Back", (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
 
         hammer_to_draw = self.rotate_image(self.hammer_img, -30) if self.hammer_swinging else self.hammer_img
         h, w = hammer_to_draw.shape[:2]
