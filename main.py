@@ -9,7 +9,8 @@ clock = pygame.time.Clock()
 
 games = {
     "Whac-A-Mole": WhacAMole(),
-    "Taiko Drum": TaikoDrum(screen),
+    # Taiko Drum 不要傳 screen，直接用 OpenCV 版本
+    "Taiko Drum": None,
     "12-Key Piano": Piano12Keys(screen)
 }
 current_game = None
@@ -31,8 +32,14 @@ def main_loop():
         if current_game is None:
             show_lobby()
         else:
-            current_game.update()
-            current_game.render()
+            # 特別處理 Taiko Drum
+            if current_game == "Taiko Drum":
+                TaikoDrum().main_loop()
+                current_game = None
+                continue
+            else:
+                current_game.update()
+                current_game.render()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -43,19 +50,21 @@ def main_loop():
                     if event.key == pygame.K_1:
                         current_game = games["Whac-A-Mole"]
                     elif event.key == pygame.K_2:
-                        current_game = games["Taiko Drum"]
+                        current_game = "Taiko Drum"
                     elif event.key == pygame.K_3:
                         current_game = games["12-Key Piano"]
                 else:
                     if event.key == pygame.K_ESCAPE:
                         current_game = None  # 回到選單
                     else:
-                        current_game.handle_event(event)
+                        if current_game != "Taiko Drum":
+                            current_game.handle_event(event)
             elif event.type == pygame.KEYUP:
-                if current_game:
+                if current_game and current_game != "Taiko Drum":
                     current_game.handle_event(event)
 
         clock.tick(30)
 
 if __name__ == "__main__":
     main_loop()
+
