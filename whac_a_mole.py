@@ -326,7 +326,7 @@ class WhacAMole(GameBase):
 
             spacing = 40
 
-            labels = ["Easy", "Hard"]
+            labels = ["Easy", "Hard1"]
 
             for i, label in enumerate(labels):
                 x = (1152 - button_width) // 2
