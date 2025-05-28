@@ -250,7 +250,7 @@ class TaikoDrum(GameBase):
         frame = self.background.copy()
         center_y = self.center_y
         center = (self.judge_x, center_y)
-        # 移除同心圓顯示
+        # 移除miss音符淡出效果與miss_banner顯示
         for note in self.notes:
             if note['type'] == 'roll':
                 y = center_y - 30  # roll條置中
@@ -266,30 +266,20 @@ class TaikoDrum(GameBase):
             else:
                 x = int(note['x']) - 40
                 y = center_y - 40  # A/L音符置中
-                img = self.a_miss if note['type'] == 'left' and note['miss'] else \
-                      self.l_miss if note['type'] == 'right' and note['miss'] else \
-                      self.a_circle if note['type'] == 'left' else self.l_circle
-                # miss音符淡出效果
-                if note['miss']:
-                    if 'fade' not in note:
-                        note['fade'] = 1.0
-                    else:
-                        note['fade'] -= 0.05
-                    if note['fade'] > 0:
-                        overlay = img.copy()
-                        if overlay.shape[2] == 4:
-                            overlay = overlay.astype(float)
-                            overlay[:,:,3] = overlay[:,:,3] * note['fade']
-                            overlay = overlay.astype(np.uint8)
-                        self.overlay_image(frame, overlay, x, y)
-                else:
-                    self.overlay_image(frame, img, x, y)
-        if self.miss_banner:
-            banner_img = self.miss_banner[0]
-            self.overlay_image(frame, banner_img, self.judge_x-100, 120)
+                img = self.a_circle if note['type'] == 'left' else self.l_circle
+                self.overlay_image(frame, img, x, y)
+        # 不再顯示miss_banner
+        # 顯示評價文字，增加白色邊框
         if self.judge_text:
             text, color, _ = self.judge_text
-            cv2.putText(frame, text, (self.judge_x-30, 220), self.font, 1.5, color, 4)
+            pos = (self.judge_x-30, 220)
+            # 先畫白色粗邊框
+            for dx in [-2, 0, 2]:
+                for dy in [-2, 0, 2]:
+                    if dx != 0 or dy != 0:
+                        cv2.putText(frame, text, (pos[0]+dx, pos[1]+dy), self.font, 1.5, (255,255,255), 6)
+            # 再畫主體文字
+            cv2.putText(frame, text, pos, self.font, 1.5, color, 4)
         cv2.putText(frame, f"Score: {self.score}", (10, 40), self.font, 1, (0, 255, 255), 2)
         # 畫 combo 能量條（下方置中加大，100格，彩虹色）
         max_bar = 100
