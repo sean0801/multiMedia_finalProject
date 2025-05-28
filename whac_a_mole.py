@@ -43,6 +43,7 @@ class WhacAMole(GameBase):
         self.mole_anim_duration = 500
 
         self.score = 0
+        self.high_score = 0
         self.lives = 3
         self.duration = 60
         self.victory = False
@@ -51,6 +52,8 @@ class WhacAMole(GameBase):
         self.background = self.load_image("background.jpg", (1152, 768), color=(80, 80, 80))
         self.hammer_img = self.load_image("hammer.png", (100, 100))
         self.heart_img = self.load_image("heart.png", (40, 40))
+        self.bomb_img = self.load_image("bomb.png", (150, 150))
+        self.menu_bg = self.load_image("menu_bg.png", (1152, 768), color=(120, 120, 120))
         self.hammer_swinging = False
         self.hammer_swing_time = 0
         self.mouse_x, self.mouse_y = 0, 0
@@ -64,13 +67,18 @@ class WhacAMole(GameBase):
             self.mole_hit_sound = pygame.mixer.Sound("bee.wav")
         except:
             self.mole_hit_sound = None
+        try:
+            self.bomb_sound = pygame.mixer.Sound("bomb.wav")  # ← 檔名可替換為你自己的爆炸音檔
+        except:
+            self.bomb_sound = None
 
         for pos in self.positions:
             self.moles.append({
                 'pos': pos,
                 'state': MoleState.HIDDEN,
                 'start': 0,
-                'hit': False
+                'hit': False,
+                'type': 'mole'  # 新增 type 欄位
             })
 
     def draw_rounded_rect(self, img, top_left, bottom_right, radius, color, thickness=-1):
@@ -144,13 +152,15 @@ class WhacAMole(GameBase):
             labels = ["Difficulty", "Timer"]
             for i, label in enumerate(labels):
                 x = (1152 - button_width) // 2
-                y = 250 + i * (button_height + spacing)
+                y = 350 + i * (button_height + spacing)
                 if x <= self.mouse_x <= x + button_width and y <= self.mouse_y <= y + button_height:
                     if label == "Difficulty":
                         self.mode = GameMode.DIFFICULTY
                         self.state = "select_difficulty"
                     elif label == "Timer":
                         self.mode = GameMode.TIMER
+                        self.score = 0
+                        self.victory = False
                         self.countdown_start = time.time()
                         for mole in self.moles:
                             mole['state'] = MoleState.HIDDEN
@@ -164,7 +174,7 @@ class WhacAMole(GameBase):
             labels = ["Easy", "Hard"]
             for i, label in enumerate(labels):
                 x = (1152 - button_width) // 2
-                y = 250 + i * (button_height + spacing)
+                y = 350 + i * (button_height + spacing)
                 if x <= self.mouse_x <= x + button_width and y <= self.mouse_y <= y + button_height:
                     if label == "Easy":
                         self.difficulty = Difficulty.EASY
@@ -187,6 +197,7 @@ class WhacAMole(GameBase):
                 self.state = "select_mode"
                 self.score = 0
                 self.lives = 3
+                self.victory = False
                 for mole in self.moles:
                     mole['state'] = MoleState.HIDDEN
 
@@ -210,13 +221,21 @@ class WhacAMole(GameBase):
                     h, w = visible_h, self.mole_img.shape[1]
                     rect = pygame.Rect(x0 - w // 2, y0 - h, w, h)
                     if rect.collidepoint(self.mouse_x, self.mouse_y) and not mole['hit']:
-                        self.score += 1
                         mole['hit'] = True
+                        if mole.get('type') == 'bomb':
+                            self.score = max(0, self.score - 1)
+                            if self.mode == GameMode.DIFFICULTY and self.difficulty == Difficulty.HARD:
+                                self.lives -= 1
+                            if self.bomb_sound:
+                                self.bomb_sound.play()
+                        else:
+                            self.score += 1
+                            if self.mole_hit_sound:
+                                self.mole_hit_sound.play()
+
                         if mole['state'] != MoleState.DISAPPEARING:
                             mole['state'] = MoleState.DISAPPEARING
                             mole['start'] = pygame.time.get_ticks()
-                        if self.mole_hit_sound:
-                            self.mole_hit_sound.play()
 
     def update(self):
         if self.state != "game":
@@ -242,7 +261,7 @@ class WhacAMole(GameBase):
                 mole['start'] = now
             elif mole['state'] == MoleState.DISAPPEARING and elapsed >= self.mole_anim_duration:
                 mole['state'] = MoleState.HIDDEN
-                if not mole['hit'] and self.mode != GameMode.TIMER:
+                if not mole['hit'] and self.mode != GameMode.TIMER and mole.get('type') != 'bomb':
                     self.lives -= 1
                 mole['hit'] = False
 
@@ -250,13 +269,19 @@ class WhacAMole(GameBase):
                 active_count += 1
 
         if active_count == 0:
-            count = 1 if self.mode == GameMode.DIFFICULTY and self.difficulty == Difficulty.EASY else random.randint(1, 3)
+            count = 1 if self.mode == GameMode.DIFFICULTY and self.difficulty == Difficulty.EASY else random.randint(1,
+                                                                                                                     3)
             for mole in self.moles:
                 mole['state'] = MoleState.HIDDEN
             for mole in random.sample(self.moles, count):
                 mole['state'] = MoleState.APPEARING
                 mole['start'] = now
                 mole['hit'] = False
+                if self.mode == GameMode.TIMER or (
+                        self.mode == GameMode.DIFFICULTY and self.difficulty == Difficulty.HARD):
+                    mole['type'] = 'bomb' if random.random() < 0.3 else 'mole'
+                else:
+                    mole['type'] = 'mole'
 
         if self.mode == GameMode.DIFFICULTY:
             if self.score >= 30:
@@ -270,17 +295,22 @@ class WhacAMole(GameBase):
             if int(self.duration - (time.time() - self.start_time)) <= 0:
                 self.state = "end"
                 self.victory = False
-
+                if self.score > self.high_score:
+                    self.high_score = self.score
     def render(self):
-        frame = self.background.copy()
+        if self.state in ["select_mode", "select_difficulty", "end"]:
+            frame = self.menu_bg.copy()
+        else:
+            frame = self.background.copy()
 
         if self.state == "select_mode":
+
             button_width, button_height = 300, 60
             spacing = 40
             labels = ["Difficulty", "Timer"]
             for i, label in enumerate(labels):
                 x = (1152 - button_width) // 2
-                y = 250 + i * (button_height + spacing)
+                y = 350 + i * (button_height + spacing)
                 hover = x <= self.mouse_x <= x + button_width and y <= self.mouse_y <= y + button_height
                 color = (200, 200, 255) if hover else (255, 255, 255)
                 self.draw_rounded_rect(frame, (x, y), (x + button_width, y + button_height), 20, color)
@@ -296,12 +326,12 @@ class WhacAMole(GameBase):
 
             spacing = 40
 
-            labels = ["Easy", "Hard"]
+            labels = ["Easy", "Hard1"]
 
             for i, label in enumerate(labels):
                 x = (1152 - button_width) // 2
 
-                y = 250 + i * (button_height + spacing)
+                y = 350 + i * (button_height + spacing)
 
                 hover = x <= self.mouse_x <= x + button_width and y <= self.mouse_y <= y + button_height
 
@@ -348,7 +378,8 @@ class WhacAMole(GameBase):
                 full_h = self.mole_img.shape[0]
                 visible_h = int(full_h * ratio)
                 if visible_h > 0:
-                    img_crop = self.mole_img[0:visible_h, :, :]
+                    img = self.bomb_img if mole.get('type') == 'bomb' else self.mole_img
+                    img_crop = img[0:visible_h, :, :]
                     h, w = img_crop.shape[:2]
                     top_left = (int(x - w / 2), int(y - h))
                     frame = self.overlay_image(frame, img_crop, top_left)
@@ -357,6 +388,12 @@ class WhacAMole(GameBase):
             if self.mode == GameMode.TIMER:
                 remaining = int(self.duration - (time.time() - self.start_time))
                 cv2.putText(frame, f"Time: {remaining}", (20, 90), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 3)
+                text = f"High Score: {self.high_score}"
+                text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.2, 3)[0]
+                x = frame.shape[1] - text_size[0] - 20  # 右邊往左推 20 px
+                y = 50
+                cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 3)
+
             else:
                 for i in range(self.lives):
                     x = 20 + i * 50  # 每顆愛心間距 50px
@@ -369,6 +406,9 @@ class WhacAMole(GameBase):
             else:
                 cv2.putText(frame, "Game Over", (420, 350), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
             cv2.putText(frame, f"Score: {self.score}", (450, 420), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 3)
+            if self.mode == GameMode.TIMER:
+                cv2.putText(frame, f"High Score: {self.high_score}", (420, 470), cv2.FONT_HERSHEY_SIMPLEX, 1.2,
+                            (0, 0, 0), 3)
             # 返回鍵動畫（與選單一致）
             back_x, back_y, back_w, back_h = 50, 50, 120, 50
             hover = back_x <= self.mouse_x <= back_x + back_w and back_y <= self.mouse_y <= back_y + back_h
@@ -403,4 +443,4 @@ class WhacAMole(GameBase):
                 )
         else:
             background[y:y+oh, x:x+ow] = overlay[:, :, :3]
-        return background
+        return background #abd

@@ -89,9 +89,7 @@ def main_loop():
             elif event.type == pygame.KEYUP:
                 if current_game and current_game != "Taiko Drum":
                     current_game.handle_event(event)
-
         clock.tick(30)
 
 if __name__ == "__main__":
     main_loop()
-

@@ -281,7 +281,7 @@ class TaikoDrum(GameBase):
             # 再畫主體文字
             cv2.putText(frame, text, pos, self.font, 1.5, color, 4)
         cv2.putText(frame, f"Score: {self.score}", (10, 40), self.font, 1, (0, 255, 255), 2)
-        # 畫 combo 能量條（下方置中加大，100格，彩虹色）
+        # 畫combo能量條（下方置中加大，100格，彩虹色）
         max_bar = 100
         bar_w, bar_h = 8, 48
         total_bar_w = max_bar * bar_w
