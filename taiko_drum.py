@@ -287,7 +287,7 @@ class TaikoDrum(GameBase):
         total_bar_w = max_bar * bar_w
         bar_x = (self.screen_size[0] - total_bar_w) // 2
         bar_y = self.screen_size[1] - 80
-        # 彩虹色分布（紅->橙->黃->綠->藍->靛->紫）
+        # 彩虹色分布（紅->橙->黃->綠->藍->靛->紫)
         def rainbow_color(i, total):
             # HSV色環: 0(紅)-255(紫)，i/total*255，避免超出uint8
             hsv = np.array([int(i/total*255), 255, 255], dtype=np.uint8)
