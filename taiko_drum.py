@@ -7,13 +7,21 @@ from threading import Thread
 import simpleaudio as sa
 
 class TaikoDrum(GameBase):
-    def __init__(self, screen_size=(800, 600), speed=5, interval=2.0):
+    def resize_keep_aspect(self, img, max_width, max_height):
+        h, w = img.shape[:2]
+        scale = min(max_width / w, max_height / h)
+        new_w, new_h = int(w * scale), int(h * scale)
+        return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+    def __init__(self, screen_size=(800, 600), speed=5, interval=5.0):
         super().__init__("Taiko Drum")
         self.screen_size = screen_size
         self.font = cv2.FONT_HERSHEY_SIMPLEX
         self.notes = []
         self.score = 0
-        self.judge_x = 110
+        # 判定圓與音符軌道y座標設為畫面上下置中，x維持在左側
+        self.judge_x = 105  # 再往左移動5
+        self.center_y = self.screen_size[1] // 2 - 10
         self.combo = 0
         self.current_group = -1
         self.group_notes = []
@@ -30,12 +38,12 @@ class TaikoDrum(GameBase):
         self.ldrum_sound = "Ldrum.mp3"
         self.wrong_sound = "Wrong.mp3"
 
-        # 載入圖片
+        # 載入圖片（等比例縮放）
         self.background = cv2.resize(cv2.imread("taiko_drum_bgi.png"), self.screen_size)
-        self.a_circle = cv2.resize(cv2.imread('A_circle.png', cv2.IMREAD_UNCHANGED), (100, 60))
-        self.l_circle = cv2.resize(cv2.imread('L_circle.png', cv2.IMREAD_UNCHANGED), (100, 60))
-        self.a_miss = cv2.resize(cv2.imread('A_miss.png', cv2.IMREAD_UNCHANGED), (100, 60))
-        self.l_miss = cv2.resize(cv2.imread('L_miss.png', cv2.IMREAD_UNCHANGED), (100, 60))
+        self.a_circle = self.resize_keep_aspect(cv2.imread('A_circle.png', cv2.IMREAD_UNCHANGED), 80, 80)
+        self.l_circle = self.resize_keep_aspect(cv2.imread('L_circle.png', cv2.IMREAD_UNCHANGED), 80, 80)
+        self.a_miss = self.resize_keep_aspect(cv2.imread('A_miss.png', cv2.IMREAD_UNCHANGED), 80, 80)
+        self.l_miss = self.resize_keep_aspect(cv2.imread('L_miss.png', cv2.IMREAD_UNCHANGED), 80, 80)
         self.a_miss_banner = cv2.resize(cv2.imread('A_miss_banner.png', cv2.IMREAD_UNCHANGED), (200, 80))
         self.l_miss_banner = cv2.resize(cv2.imread('L_miss_banner.png', cv2.IMREAD_UNCHANGED), (200, 80))
         self.black_miss_banner = cv2.resize(cv2.imread('black_miss_banner.png', cv2.IMREAD_UNCHANGED), (200, 80))
@@ -60,38 +68,30 @@ class TaikoDrum(GameBase):
             if i < note_count - 1:
                 t += random.uniform(min_interval,
                                     (max_time - t) / (note_count - i - 1) if (note_count - i - 1) > 0 else min_interval)
+
         notes = []
-        roll_intervals = []
-        roll_prob = 0.04
+        # 平均30秒2次roll => 每個group出現roll的機率 = group_interval / 15
+        roll_prob = min(1.0, self.group_interval / 15.0)
+        roll_info = None
+        if random.random() < roll_prob:
+            roll_duration = random.uniform(2, 4)
+            max_roll_start = max_time - roll_duration
+            if max_roll_start > 0:
+                roll_start = random.uniform(0, max_roll_start)
+                roll_end = roll_start + roll_duration
+                roll_info = (roll_start, roll_end)
+                notes.append({'time': roll_start + 1, 'type': 'roll', 'duration': roll_duration - 2})
+        # 產生 A/L 音符，避開 roll 的 0~1, roll本體, roll_end~roll_end+1 區間
         for tt in times:
-            if random.random() < roll_prob:
-                roll_duration = 1.0
-                roll_start = tt
-                roll_end = tt + roll_duration
-                overlap = False
-                # 檢查與現有 roll 是否重疊
-                for r_start, r_end in roll_intervals:
-                    if not (roll_end <= r_start or roll_start >= r_end):
+            overlap = False
+            if roll_info:
+                r_start, r_end = roll_info
+                forbidden = [ (r_start, r_start+1), (r_start+1, r_end), (r_end, r_end+1) ]
+                for f_start, f_end in forbidden:
+                    if f_start < tt < f_end:
                         overlap = True
                         break
-                # 檢查範圍內有無 A/L 音符，且roll區間內不能有A/L
-                for n in notes:
-                    if n['type'] in ['left', 'right']:
-                        n_time = n['time']
-                        if roll_start <= n_time < roll_end:
-                            overlap = True
-                            break
-                if not overlap:
-                    notes.append({'time': tt, 'type': 'roll', 'duration': roll_duration})
-                    roll_intervals.append((roll_start, roll_end))
-        # 確保 roll 區間內不會有 A/L 音符
-        for tt in times:
-            in_roll = False
-            for r_start, r_end in roll_intervals:
-                if r_start <= tt < r_end:
-                    in_roll = True
-                    break
-            if not in_roll:
+            if not overlap:
                 notes.append({'time': tt, 'type': random.choice(['left', 'right'])})
         self.group_notes = [(n['time'], n) for n in notes]
         self.group_notes.sort()
@@ -109,7 +109,9 @@ class TaikoDrum(GameBase):
                now - self.group_start_time >= self.group_notes[self.group_note_idx][0]):
             note_info = self.group_notes[self.group_note_idx][1]
             if note_info['type'] == 'roll':
-                self.notes.append({'x': 800, 'type': 'roll', 'hit': False, 'miss': False, 'roll_hits': 0, 'roll_active': True, 'duration': note_info['duration'], 'start_x': 800, 'end_x': 800 - self.note_speed * (note_info['duration'] * 1000 // 30)})
+                # 修正 roll note 長度計算
+                roll_pixel_len = int(self.note_speed * (note_info['duration'] * 1000 / 30))
+                self.notes.append({'x': 800, 'type': 'roll', 'hit': False, 'miss': False, 'roll_hits': 0, 'roll_active': True, 'duration': note_info['duration'], 'start_x': 800, 'end_x': 800 - roll_pixel_len})
             else:
                 self.notes.append({'x': 800, 'type': note_info['type'], 'hit': False, 'miss': False})
             self.group_note_idx += 1
@@ -246,29 +248,15 @@ class TaikoDrum(GameBase):
 
     def render(self):
         frame = self.background.copy()
-        # Draw three judge circles
-        center = (self.judge_x, 300)
-        cv2.circle(frame, center, 45, (0, 255, 255), 2)  # good (outer)
-        cv2.circle(frame, center, 30, (0, 128, 255), 2)  # cool (middle)
-        cv2.circle(frame, center, 15, (0, 0, 255), 2)    # perfect (inner)
-        # 畫 combo 能量條（下方置中加大）
-        max_bar = 20
-        bar_w, bar_h = 32, 48
-        total_bar_w = max_bar * bar_w
-        bar_x = (self.screen_size[0] - total_bar_w) // 2
-        bar_y = self.screen_size[1] - 80
-        for i in range(max_bar):
-            color = (0,255,0) if i < self.combo else (80,80,80)
-            cv2.rectangle(frame, (bar_x + i*bar_w, bar_y), (bar_x + (i+1)*bar_w - 4, bar_y + bar_h), color, -1)
-        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + total_bar_w, bar_y + bar_h), (255,255,255), 3)
-        cv2.putText(frame, f"Combo: {self.combo}", (bar_x + total_bar_w//2 - 90, bar_y-20), self.font, 1.5, (0,255,0), 3)
+        center_y = self.center_y
+        center = (self.judge_x, center_y)
+        # 移除同心圓顯示
         for note in self.notes:
             if note['type'] == 'roll':
-                # 畫圓頭圓尾的 roll 條，並調整高度較小
-                y = 275
+                y = center_y - 30  # roll條置中
                 h = 60
                 x1 = int(note['x'])
-                roll_len = int(self.note_speed * (note['duration'] * 1000 // 30)) + 100
+                roll_len = int(self.note_speed * (note['duration'] * 1000 / 30))
                 x2 = x1 - roll_len
                 radius = h // 2
                 cv2.rectangle(frame, (x2 + radius, y), (x1 + 100 - radius, y + h), (255,0,255), -1)
@@ -276,11 +264,11 @@ class TaikoDrum(GameBase):
                 cv2.ellipse(frame, (x1 + 100 - radius, y + radius), (radius, radius), 0, -90, 90, (255,0,255), -1)
                 cv2.putText(frame, f"ROLL!", (x1, y-10), self.font, 0.8, (255,0,255), 2)
             else:
+                x = int(note['x']) - 40
+                y = center_y - 40  # A/L音符置中
                 img = self.a_miss if note['type'] == 'left' and note['miss'] else \
                       self.l_miss if note['type'] == 'right' and note['miss'] else \
                       self.a_circle if note['type'] == 'left' else self.l_circle
-                x = int(note['x']) - 50
-                y = 250
                 # miss音符淡出效果
                 if note['miss']:
                     if 'fade' not in note:
@@ -303,9 +291,39 @@ class TaikoDrum(GameBase):
             text, color, _ = self.judge_text
             cv2.putText(frame, text, (self.judge_x-30, 220), self.font, 1.5, color, 4)
         cv2.putText(frame, f"Score: {self.score}", (10, 40), self.font, 1, (0, 255, 255), 2)
-        # 顯示 combo 加成
-        if hasattr(self, 'last_combo_bonus') and self.last_combo_bonus > 0:
-            cv2.putText(frame, f"+{self.last_combo_bonus} Combo Bonus!", (bar_x + total_bar_w//2 - 120, bar_y + bar_h + 40), self.font, 1.2, (0,128,255), 3)
+        # 畫 combo 能量條（下方置中加大，100格，彩虹色）
+        max_bar = 100
+        bar_w, bar_h = 8, 48
+        total_bar_w = max_bar * bar_w
+        bar_x = (self.screen_size[0] - total_bar_w) // 2
+        bar_y = self.screen_size[1] - 80
+        # 彩虹色分布（紅->橙->黃->綠->藍->靛->紫）
+        def rainbow_color(i, total):
+            # HSV色環: 0(紅)-255(紫)，i/total*255，避免超出uint8
+            hsv = np.array([int(i/total*255), 255, 255], dtype=np.uint8)
+            rgb = cv2.cvtColor(hsv[np.newaxis, np.newaxis, :], cv2.COLOR_HSV2BGR)[0,0]
+            return int(rgb[0]), int(rgb[1]), int(rgb[2])
+        for i in range(max_bar):
+            color = rainbow_color(i, max_bar-1)
+            if i < self.combo:
+                cv2.rectangle(frame, (bar_x + i*bar_w, bar_y), (bar_x + (i+1)*bar_w - 1, bar_y + bar_h), color, -1)
+            else:
+                cv2.rectangle(frame, (bar_x + i*bar_w, bar_y), (bar_x + (i+1)*bar_w - 1, bar_y + bar_h), (80,80,80), -1)
+        cv2.rectangle(frame, (bar_x, bar_y), (bar_x + total_bar_w, bar_y + bar_h), (255,255,255), 2)
+        # combo加成顯示
+        if self.combo <= 20:
+            bonus = 'x1'
+        elif self.combo <= 40:
+            bonus = 'x2'
+        elif self.combo <= 60:
+            bonus = 'x3'
+        elif self.combo <= 80:
+            bonus = 'x4'
+        elif self.combo <= 100:
+            bonus = 'x5'
+        else:
+            bonus = 'x10'
+        cv2.putText(frame, f"Combo: {self.combo}  Bonus: {bonus}", (bar_x + total_bar_w//2 - 160, bar_y-20), self.font, 1.2, (0,255,255), 3)
         cv2.imshow(self.window_name, frame)
 
     def show_result(self):
