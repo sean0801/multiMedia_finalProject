@@ -443,4 +443,4 @@ class WhacAMole(GameBase):
                 )
         else:
             background[y:y+oh, x:x+ow] = overlay[:, :, :3]
-        return background
+        return background #abc
