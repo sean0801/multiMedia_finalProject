@@ -5,6 +5,7 @@ pygame.init()
 pygame.display.flip = lambda: None  # 讓 flip 變成 no-op，避免未 set_mode crash
 from whac_a_mole import WhacAMole
 from taiko_drum import TaikoDrum
+from whac_a_mole import WhacAMole, MoleState
 
 WINDOW_NAME = "MultiMedia Game"
 SCREEN_SIZE = (800, 600)
@@ -77,6 +78,15 @@ def main_loop():
             elif taiko_selecting:
                 taiko_selecting = False
             else:
+                if isinstance(current_game, WhacAMole):
+                    # 把狀態改為「選擇模式」，把分數和生命等回復
+                    current_game.state = "select_mode"
+                    current_game.score = 0
+                    current_game.lives = 3
+                    current_game.victory = False
+                    for mole in current_game.moles:
+                        mole['state'] = MoleState.HIDDEN
+                        mole['hit'] = False
                 cv2.setMouseCallback(WINDOW_NAME, lambda *args: None)
                 current_game = None
                 pressed_keys.clear()
