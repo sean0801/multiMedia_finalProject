@@ -4,7 +4,8 @@ import random
 import time
 from game_base import GameBase
 from threading import Thread
-import simpleaudio as sa
+import pygame
+import os
 
 class TaikoDrum(GameBase):
     def resize_keep_aspect(self, img, max_width, max_height):
@@ -33,29 +34,57 @@ class TaikoDrum(GameBase):
         self.note_speed = speed
         self.judge_text = None  # (text, color, show_until_time)
 
+        # 初始化 pygame mixer
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
         # 載入音效
-        self.adrum_sound = "Adrum.mp3"
-        self.ldrum_sound = "Ldrum.mp3"
-        self.wrong_sound = "Wrong.mp3"
+        try:
+            self.adrum_sound = pygame.mixer.Sound("Adrum.wav")
+        except Exception as e:
+            print(f"警告：Adrum.wav 載入失敗: {e}")
+            self.adrum_sound = None
+        try:
+            self.ldrum_sound = pygame.mixer.Sound("Ldrum.wav")
+        except Exception as e:
+            print(f"警告：Ldrum.wav 載入失敗: {e}")
+            self.ldrum_sound = None
+        try:
+            self.wrong_sound = pygame.mixer.Sound("Wrong.wav")
+        except Exception as e:
+            print(f"警告：Wrong.wav 載入失敗: {e}")
+            self.wrong_sound = None
 
-        # 載入圖片（等比例縮放）
-        self.background = cv2.resize(cv2.imread("taiko_drum_bgi.png"), self.screen_size)
-        self.a_circle = self.resize_keep_aspect(cv2.imread('A_circle.png', cv2.IMREAD_UNCHANGED), 80, 80)
-        self.l_circle = self.resize_keep_aspect(cv2.imread('L_circle.png', cv2.IMREAD_UNCHANGED), 80, 80)
-        self.a_miss = self.resize_keep_aspect(cv2.imread('A_miss.png', cv2.IMREAD_UNCHANGED), 80, 80)
-        self.l_miss = self.resize_keep_aspect(cv2.imread('L_miss.png', cv2.IMREAD_UNCHANGED), 80, 80)
-        self.a_miss_banner = cv2.resize(cv2.imread('A_miss_banner.png', cv2.IMREAD_UNCHANGED), (200, 80))
-        self.l_miss_banner = cv2.resize(cv2.imread('L_miss_banner.png', cv2.IMREAD_UNCHANGED), (200, 80))
-        self.black_miss_banner = cv2.resize(cv2.imread('black_miss_banner.png', cv2.IMREAD_UNCHANGED), (200, 80))
+        # 載入圖片（等比例縮放），先判斷是否載入成功
+        def safe_imread(path, fallback_shape=None):
+            img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+            if img is None:
+                print(f"警告：載入 {path} 失敗")
+                if fallback_shape is not None:
+                    return np.zeros(fallback_shape, dtype=np.uint8)
+                return None
+            return img
+
+        bg_img = safe_imread("taiko_drum_bgi.png", (self.screen_size[1], self.screen_size[0], 3))
+        self.background = cv2.resize(bg_img, self.screen_size) if bg_img is not None else np.zeros((self.screen_size[1], self.screen_size[0], 3), dtype=np.uint8)
+        self.a_circle = self.resize_keep_aspect(safe_imread('A_circle.png', (80, 80, 4)), 80, 80)
+        self.l_circle = self.resize_keep_aspect(safe_imread('L_circle.png', (80, 80, 4)), 80, 80)
+        self.a_miss = self.resize_keep_aspect(safe_imread('A_miss.png', (80, 80, 4)), 80, 80)
+        self.l_miss = self.resize_keep_aspect(safe_imread('L_miss.png', (80, 80, 4)), 80, 80)
+        amb = safe_imread('A_miss_banner.png', (80, 200, 4))
+        self.a_miss_banner = cv2.resize(amb, (200, 80)) if amb is not None else np.zeros((80, 200, 4), dtype=np.uint8)
+        lmb = safe_imread('L_miss_banner.png', (80, 200, 4))
+        self.l_miss_banner = cv2.resize(lmb, (200, 80)) if lmb is not None else np.zeros((80, 200, 4), dtype=np.uint8)
+        bmb = safe_imread('black_miss_banner.png', (80, 200, 4))
+        self.black_miss_banner = cv2.resize(bmb, (200, 80)) if bmb is not None else np.zeros((80, 200, 4), dtype=np.uint8)
         self.miss_banner = None  # (img, show_until_time)
 
-    def play_sound(self, path):
-        def _play():
-            try:
-                sa.WaveObject.from_wave_file(path).play()
-            except Exception:
-                pass
-        Thread(target=_play, daemon=True).start()
+    def play_sound(self, sound):
+        if sound is None:
+            return
+        try:
+            sound.play()
+        except Exception as e:
+            print(f"播放音效失敗: {e}")
 
     def start_new_group(self):
         note_count = random.choice([2, 4, 6])
@@ -356,3 +385,4 @@ class TaikoDrum(GameBase):
             elif key != 255:
                 self.handle_event(key)
         self.show_result()
+

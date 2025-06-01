@@ -26,7 +26,6 @@ class MoleState(Enum):
 class WhacAMole(GameBase):
     def __init__(self):
         super().__init__("Whac-A-Mole")
-        self.screen = pygame.display.set_mode((1152, 768))
         self.font = pygame.font.SysFont(None, 60)
 
         self.mode = GameMode.NONE
@@ -297,7 +296,11 @@ class WhacAMole(GameBase):
                 self.victory = False
                 if self.score > self.high_score:
                     self.high_score = self.score
-    def render(self):
+
+    def render(self, frame=None):
+        if frame is None:
+            frame = np.ones((600, 800, 3), dtype=np.uint8) * 30
+
         if self.state in ["select_mode", "select_difficulty", "end"]:
             frame = self.menu_bg.copy()
         else:
@@ -424,10 +427,7 @@ class WhacAMole(GameBase):
         top_left = (self.mouse_x - w // 2, self.mouse_y - h // 2)
         frame = self.overlay_image(frame, hammer_to_draw, top_left)
 
-        cv2.imshow("Whac-A-Mole", frame)
-        cv2.setMouseCallback("Whac-A-Mole", self.on_mouse_click)
-        cv2.waitKey(1)
-        return True
+        return frame
 
     def overlay_image(self, background, overlay, position):
         x, y = position
@@ -444,3 +444,4 @@ class WhacAMole(GameBase):
         else:
             background[y:y+oh, x:x+ow] = overlay[:, :, :3]
         return background #abd
+
