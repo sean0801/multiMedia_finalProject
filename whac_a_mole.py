@@ -405,9 +405,9 @@ class WhacAMole(GameBase):
 
         elif self.state == "end":
             if self.mode == GameMode.DIFFICULTY and self.victory:
-                cv2.putText(frame, "Congratulations!", (350, 350), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 150, 0), 4)
+                cv2.putText(frame, "Congratulations!", (330, 350), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 150, 0), 4)
             else:
-                cv2.putText(frame, "Game Over", (420, 350), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
+                cv2.putText(frame, "Game Over", (395, 350), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
             cv2.putText(frame, f"Score: {self.score}", (450, 420), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 0), 3)
             if self.mode == GameMode.TIMER:
                 cv2.putText(frame, f"High Score: {self.high_score}", (420, 470), cv2.FONT_HERSHEY_SIMPLEX, 1.2,
