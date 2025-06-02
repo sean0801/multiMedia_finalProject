@@ -436,10 +436,10 @@ class Piano12Keys(GameBase):
         if not self.instruction_font_ingame: return
         instructions = [
             "操作說明:", "白鍵:A,S,D,F,G,H,J", "黑鍵:W,E,T,Y,U",
-            "樂譜:I,O,P", "節拍器:M (BPM: +/-)",
+            "樂譜:I,O,P(開/關)", "節拍器:M (BPM: +/-)",
             "錄製:R", "回放:L",
             "練耳: . (句號)",
-            "ESC:關樂譜/返回"
+            "ESC:返回"
         ]
         text_color = (220, 220, 220)
         if not surface: return
