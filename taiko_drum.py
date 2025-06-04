@@ -371,8 +371,33 @@ class TaikoDrum(GameBase):
         cv2.waitKey(0)
         cv2.destroyWindow(self.window_name)
 
+    def show_difficulty_menu(self):
+        img = np.ones((self.screen_size[1], self.screen_size[0], 3), dtype=np.uint8) * 30
+        cv2.putText(img, "Select Taiko Drum Difficulty", (80, 120), self.font, 1.2, (255,255,255), 3)
+        cv2.putText(img, "1. Easy (Slow)", (200, 220), self.font, 1, (0,255,0), 2)
+        cv2.putText(img, "2. Normal (Medium)", (200, 300), self.font, 1, (255,255,0), 2)
+        cv2.putText(img, "ESC to back", (100, 550), self.font, 1, (180,180,180), 2)
+        cv2.imshow(self.window_name, img)
+
     def main_loop(self):
         cv2.namedWindow(self.window_name)
+        # 新增：難易度選單流程
+        selecting_difficulty = True
+        while selecting_difficulty:
+            self.show_difficulty_menu()
+            key = cv2.waitKey(30) & 0xFF
+            if key == 27:  # ESC
+                cv2.destroyWindow(self.window_name)
+                return  # 返回主選單
+            elif key == ord('1'):
+                self.note_speed = 4
+                self.group_interval = 2.5
+                selecting_difficulty = False
+            elif key == ord('2'):
+                self.note_speed = 6
+                self.group_interval = 2.0
+                selecting_difficulty = False
+        # 遊戲主循環
         self.max_combo = 0
         while True:
             self.update()

@@ -34,28 +34,15 @@ def show_lobby():
     cv2.putText(img, "ESC to quit", (100, 550), font, 1, (180,180,180), 2)
     cv2.imshow(WINDOW_NAME, img)
 
-def show_taiko_difficulty():
-    img = blank_bg()
-    cv2.putText(img, "Select Taiko Drum Difficulty", (80, 120), font, 1.2, (255,255,255), 3)
-    cv2.putText(img, "1. Easy (Slow)", (200, 220), font, 1, (0,255,0), 2)
-    cv2.putText(img, "2. Normal (Medium)", (200, 300), font, 1, (255,255,0), 2)
-    cv2.putText(img, "ESC to back", (100, 550), font, 1, (180,180,180), 2)
-    cv2.imshow(WINDOW_NAME, img)
-
 def main_loop():
     global current_game
-    taiko_selecting = False
-    taiko_params = None
     pressed_keys = set()  # 新增：追蹤目前按下的 key
     while True:
         if current_game is None:
-            if not taiko_selecting:
-                show_lobby()
-            else:
-                show_taiko_difficulty()
+            show_lobby()
         else:
             if current_game == "Taiko Drum":
-                TaikoDrum(*taiko_params).main_loop()
+                TaikoDrum().main_loop()
                 current_game = None
                 continue
             elif current_game == games["Whac-A-Mole"]:
@@ -75,8 +62,6 @@ def main_loop():
         if key == 27:  # ESC
             if current_game is None:
                 break
-            elif taiko_selecting:
-                taiko_selecting = False
             else:
                 if isinstance(current_game, WhacAMole):
                     # 把狀態改為「選擇模式」，把分數和生命等回復
@@ -92,26 +77,16 @@ def main_loop():
                 pressed_keys.clear()
         elif key == ord('1'):
             if current_game is None:
-                if not taiko_selecting:
-                    if games["Whac-A-Mole"] is None:
-                        from whac_a_mole import WhacAMole
-                        games["Whac-A-Mole"] = WhacAMole()
-                    current_game = games["Whac-A-Mole"]
-                    cv2.setMouseCallback(WINDOW_NAME, current_game.on_mouse_click)
-                else:
-                    taiko_params = (SCREEN_SIZE, 4, 2.5)
-                    current_game = "Taiko Drum"
-                    taiko_selecting = False
+                if games["Whac-A-Mole"] is None:
+                    from whac_a_mole import WhacAMole
+                    games["Whac-A-Mole"] = WhacAMole()
+                current_game = games["Whac-A-Mole"]
+                cv2.setMouseCallback(WINDOW_NAME, current_game.on_mouse_click)
         elif key == ord('2'):
             if current_game is None:
-                if not taiko_selecting:
-                    taiko_selecting = True
-                else:
-                    taiko_params = (SCREEN_SIZE, 6, 2.0)
-                    current_game = "Taiko Drum"
-                    taiko_selecting = False
+                current_game = "Taiko Drum"
         elif key == ord('3'):
-            if current_game is None and not taiko_selecting:
+            if current_game is None:
                 if games["12-Key Piano"] is None:
                     from piano_12keys import Piano12Keys
                     games["12-Key Piano"] = Piano12Keys(piano_surface)
@@ -143,3 +118,4 @@ if __name__ == "__main__":
         print("主程式發生例外：")
         traceback.print_exc()
         input("按 Enter 結束...")
+
