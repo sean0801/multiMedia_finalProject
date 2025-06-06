@@ -7,6 +7,9 @@ from threading import Thread
 import pygame
 import os
 
+# 新增：統一視窗名稱
+WINDOW_NAME = "MultiMedia Game"
+
 class TaikoDrum(GameBase):
     def resize_keep_aspect(self, img, max_width, max_height):
         h, w = img.shape[:2]
@@ -30,7 +33,6 @@ class TaikoDrum(GameBase):
         self.group_start_time = 0
         self.group_interval = interval  # 秒
         self.last_time = time.time()
-        self.window_name = "Taiko Drum"
         self.note_speed = speed
         self.judge_text = None  # (text, color, show_until_time)
 
@@ -252,28 +254,40 @@ class TaikoDrum(GameBase):
         h, w = overlay.shape[:2]
         bg_h, bg_w = background.shape[:2]
         # 邊界檢查與修正
-        if x < 0:
+        if (x < 0):
             overlay = overlay[:, -x:]
             w = overlay.shape[1]
             x = 0
-        if y < 0:
+        if (y < 0):
             overlay = overlay[-y:, :]
             h = overlay.shape[0]
             y = 0
-        if x + w > bg_w:
+        if (x + w > bg_w):
             overlay = overlay[:, :bg_w - x]
             w = overlay.shape[1]
-        if y + h > bg_h:
+        if (y + h > bg_h):
             overlay = overlay[:bg_h - y, :]
             h = overlay.shape[0]
-        if w <= 0 or h <= 0:
+            y = 0
+        if (w <= 0 or h <= 0):
             return
-        if overlay.shape[2] == 4:
+        if (overlay.shape[2] == 4):
             alpha = overlay[:, :, 3] / 255.0
             for c in range(3):
-                background[y:y+h, x:x+w, c] = (1 - alpha) * background[y:y+h, x:x+w, c] + alpha * overlay[:, :, c]
+                background[y:y + h, x:x + w, c] = (1 - alpha) * background[y:y + h, x:x + w, c] + alpha * overlay[:, :, c]
         else:
-            background[y:y+h, x:x+w] = overlay
+            background[y:y + h, x:x + w] = overlay
+
+    def draw_text_with_outline(self, img, text, pos, font, font_scale=1.5, color=(255,255,255), thickness=3, outline_color=(0,0,0), outline_thickness=6, mode=None):
+        # 只有當 color 沒有特別指定時才根據 mode 設定預設色
+        if mode == 'black_white' and color == (255,255,255):
+            outline_color = (0,0,0)
+            color = (255,255,255)
+        elif mode == 'white_black' and color == (255,255,255):
+            outline_color = (255,255,255)
+            color = (0,0,0)
+        cv2.putText(img, text, pos, font, font_scale, outline_color, outline_thickness, cv2.LINE_AA)
+        cv2.putText(img, text, pos, font, font_scale, color, thickness, cv2.LINE_AA)
 
     def render(self):
         frame = self.background.copy()
@@ -298,18 +312,22 @@ class TaikoDrum(GameBase):
                 img = self.a_circle if note['type'] == 'left' else self.l_circle
                 self.overlay_image(frame, img, x, y)
         # 不再顯示miss_banner
-        # 顯示評價文字，增加白色邊框
+        # 顯示評價文字分色
         if self.judge_text:
             text, color, _ = self.judge_text
             pos = (self.judge_x-30, 220)
-            # 先畫白色粗邊框
-            for dx in [-2, 0, 2]:
-                for dy in [-2, 0, 2]:
-                    if dx != 0 or dy != 0:
-                        cv2.putText(frame, text, (pos[0]+dx, pos[1]+dy), self.font, 1.5, (255,255,255), 6)
-            # 再畫主體文字
-            cv2.putText(frame, text, pos, self.font, 1.5, color, 4)
-        cv2.putText(frame, f"Score: {self.score}", (10, 40), self.font, 1, (0, 255, 255), 2)
+            # 分色顯示
+            if text == "Perfect":
+                color = (0,0,255)
+            elif text == "Cool":
+                color = (0,128,255)
+            elif text == "Good":
+                color = (0,255,255)
+            elif text == "Miss":
+                color = (255,255,255)
+            self.draw_text_with_outline(frame, text, pos, self.font, 1.5, color, 3, outline_color=(0,0,0), outline_thickness=6)
+        # Score
+        self.draw_text_with_outline(frame, f"Score: {self.score}", (10, 40), self.font, 1.5, (255,255,255), 3, outline_color=(0,0,0), outline_thickness=6)
         # 畫combo能量條（下方置中加大，100格，彩虹色）
         max_bar = 100
         bar_w, bar_h = 8, 48
@@ -329,7 +347,7 @@ class TaikoDrum(GameBase):
             else:
                 cv2.rectangle(frame, (bar_x + i*bar_w, bar_y), (bar_x + (i+1)*bar_w - 1, bar_y + bar_h), (80,80,80), -1)
         cv2.rectangle(frame, (bar_x, bar_y), (bar_x + total_bar_w, bar_y + bar_h), (255,255,255), 2)
-        # combo加成顯示
+        # combo加成顯示（置中）
         if self.combo <= 20:
             bonus = 'x1'
         elif self.combo <= 40:
@@ -342,15 +360,18 @@ class TaikoDrum(GameBase):
             bonus = 'x5'
         else:
             bonus = 'x10'
-        cv2.putText(frame, f"Combo: {self.combo}  Bonus: {bonus}", (bar_x + total_bar_w//2 - 160, bar_y-20), self.font, 1.2, (0,255,255), 3)
-        cv2.imshow(self.window_name, frame)
+        combo_text = f"Combo: {self.combo}  Bonus: {bonus}"
+        (text_w, text_h), _ = cv2.getTextSize(combo_text, self.font, 1.5, 3)
+        combo_x = (self.screen_size[0] - text_w) // 2
+        combo_y = bar_y - 20
+        self.draw_text_with_outline(frame, combo_text, (combo_x, combo_y), self.font, 1.5, (255,255,255), 3, outline_color=(0,0,0), outline_thickness=6)
+        cv2.imshow(WINDOW_NAME, frame)
 
     def show_result(self):
-        # Show result screen in English
         frame = np.ones((600, 800, 3), dtype=np.uint8) * 30
-        cv2.putText(frame, "Game Over!", (250, 120), self.font, 2, (255,255,0), 4)
-        cv2.putText(frame, f"Score: {self.score}", (250, 220), self.font, 1.5, (0,255,255), 3)
-        cv2.putText(frame, f"Max Combo: {getattr(self, 'max_combo', self.combo)}", (250, 300), self.font, 1.2, (0,255,0), 2)
+        self.draw_text_with_outline(frame, "Game Over!", (250, 120), self.font, 1.5, (255,255,0), 3, outline_color=(0,0,0), outline_thickness=6)
+        self.draw_text_with_outline(frame, f"Score: {self.score}", (250, 220), self.font, 1.5, (255,255,255), 3, outline_color=(0,0,0), outline_thickness=6)
+        self.draw_text_with_outline(frame, f"Max Combo: {getattr(self, 'max_combo', self.combo)}", (250, 300), self.font, 1.5, (0,255,0), 3, outline_color=(0,0,0), outline_thickness=6)
         # Show leaderboard
         try:
             with open("taiko_rank.txt", "r") as f:
@@ -363,31 +384,37 @@ class TaikoDrum(GameBase):
         with open("taiko_rank.txt", "w") as f:
             for s in ranks:
                 f.write(f"{s}\n")
-        cv2.putText(frame, "Leaderboard Top 5:", (250, 370), self.font, 1, (255,255,255), 2)
+        self.draw_text_with_outline(frame, "Leaderboard Top 5:", (250, 370), self.font, 1.2, (255,255,255), 2, outline_color=(0,0,0), outline_thickness=4)
         for i, s in enumerate(ranks):
-            cv2.putText(frame, f"{i+1}. {s}", (270, 420+i*40), self.font, 1, (255,200,200), 2)
-        cv2.putText(frame, "Press any key to return to menu", (180, 550), self.font, 1, (200,255,255), 2)
-        cv2.imshow(self.window_name, frame)
+            self.draw_text_with_outline(frame, f"{i+1}. {s}", (270, 420+i*40), self.font, 1.2, (255,200,200), 2, outline_color=(0,0,0), outline_thickness=4)
+        self.draw_text_with_outline(frame, "Press any key to return to menu", (180, 550), self.font, 1, (200,255,255), 2, outline_color=(0,0,0), outline_thickness=3)
+        cv2.imshow(WINDOW_NAME, frame)
         cv2.waitKey(0)
-        cv2.destroyWindow(self.window_name)
 
     def show_difficulty_menu(self):
-        img = np.ones((self.screen_size[1], self.screen_size[0], 3), dtype=np.uint8) * 30
-        cv2.putText(img, "Select Taiko Drum Difficulty", (80, 120), self.font, 1.2, (255,255,255), 3)
-        cv2.putText(img, "1. Easy (Slow)", (200, 220), self.font, 1, (0,255,0), 2)
-        cv2.putText(img, "2. Normal (Medium)", (200, 300), self.font, 1, (255,255,0), 2)
-        cv2.putText(img, "ESC to back", (100, 550), self.font, 1, (180,180,180), 2)
-        cv2.imshow(self.window_name, img)
+        # 嘗試載入 taikodrum_diff_select.png 作為背景
+        bg_img = cv2.imread("taikodrum_diff_select.png")
+        if bg_img is not None:
+            img = cv2.resize(bg_img, self.screen_size)
+        else:
+            img = np.ones((self.screen_size[1], self.screen_size[0], 3), dtype=np.uint8) * 30
+        def draw_text_with_outline(img, text, pos, font, font_scale, color, thickness=3, outline_color=(0,0,0), outline_thickness=6):
+            cv2.putText(img, text, pos, font, font_scale, outline_color, outline_thickness, cv2.LINE_AA)
+            cv2.putText(img, text, pos, font, font_scale, color, thickness, cv2.LINE_AA)
+        # align main.py: font_scale=1.5, thickness=3
+        draw_text_with_outline(img, "1. Easy (Slow)", (360, 235), self.font, 1.0, (0,255,0), 3)
+        draw_text_with_outline(img, "2. Normal (Medium)", (360, 335), self.font, 1.0, (255,255,0), 3)
+        draw_text_with_outline(img, "ESC to back", (100, 550), self.font, 1, (180,180,180), 2)
+        cv2.imshow(WINDOW_NAME, img)
 
     def main_loop(self):
-        cv2.namedWindow(self.window_name)
-        # 新增：難易度選單流程
+        # 不再呼叫 cv2.namedWindow，主程式已建立
         selecting_difficulty = True
         while selecting_difficulty:
             self.show_difficulty_menu()
             key = cv2.waitKey(30) & 0xFF
             if key == 27:  # ESC
-                cv2.destroyWindow(self.window_name)
+                # 不要 destroyWindow，直接 return
                 return  # 返回主選單
             elif key == ord('1'):
                 self.note_speed = 4

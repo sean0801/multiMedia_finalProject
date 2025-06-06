@@ -25,7 +25,12 @@ current_game = None
 font = cv2.FONT_HERSHEY_SIMPLEX
 
 def show_lobby():
-    img = blank_bg()
+    # 嘗試載入 main_bg.png 作為主選單背景
+    bg_img = cv2.imread("main_bg.png")
+    if bg_img is not None:
+        img = cv2.resize(bg_img, SCREEN_SIZE)
+    else:
+        img = blank_bg()
     y = 150
     for i, name in enumerate(games):
         text = f"{i + 1}. {name}"
