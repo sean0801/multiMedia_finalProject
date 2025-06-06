@@ -7,6 +7,9 @@ from threading import Thread
 import pygame
 import os
 
+# 新增：統一視窗名稱
+WINDOW_NAME = "MultiMedia Game"
+
 class TaikoDrum(GameBase):
     def resize_keep_aspect(self, img, max_width, max_height):
         h, w = img.shape[:2]
@@ -30,7 +33,6 @@ class TaikoDrum(GameBase):
         self.group_start_time = 0
         self.group_interval = interval  # 秒
         self.last_time = time.time()
-        self.window_name = "Taiko Drum"
         self.note_speed = speed
         self.judge_text = None  # (text, color, show_until_time)
 
@@ -343,7 +345,7 @@ class TaikoDrum(GameBase):
         else:
             bonus = 'x10'
         cv2.putText(frame, f"Combo: {self.combo}  Bonus: {bonus}", (bar_x + total_bar_w//2 - 160, bar_y-20), self.font, 1.2, (0,255,255), 3)
-        cv2.imshow(self.window_name, frame)
+        cv2.imshow(WINDOW_NAME, frame)
 
     def show_result(self):
         # Show result screen in English
@@ -367,9 +369,8 @@ class TaikoDrum(GameBase):
         for i, s in enumerate(ranks):
             cv2.putText(frame, f"{i+1}. {s}", (270, 420+i*40), self.font, 1, (255,200,200), 2)
         cv2.putText(frame, "Press any key to return to menu", (180, 550), self.font, 1, (200,255,255), 2)
-        cv2.imshow(self.window_name, frame)
+        cv2.imshow(WINDOW_NAME, frame)
         cv2.waitKey(0)
-        cv2.destroyWindow(self.window_name)
 
     def show_difficulty_menu(self):
         img = np.ones((self.screen_size[1], self.screen_size[0], 3), dtype=np.uint8) * 30
@@ -377,17 +378,16 @@ class TaikoDrum(GameBase):
         cv2.putText(img, "1. Easy (Slow)", (200, 220), self.font, 1, (0,255,0), 2)
         cv2.putText(img, "2. Normal (Medium)", (200, 300), self.font, 1, (255,255,0), 2)
         cv2.putText(img, "ESC to back", (100, 550), self.font, 1, (180,180,180), 2)
-        cv2.imshow(self.window_name, img)
+        cv2.imshow(WINDOW_NAME, img)
 
     def main_loop(self):
-        cv2.namedWindow(self.window_name)
-        # 新增：難易度選單流程
+        # 不再呼叫 cv2.namedWindow，主程式已建立
         selecting_difficulty = True
         while selecting_difficulty:
             self.show_difficulty_menu()
             key = cv2.waitKey(30) & 0xFF
             if key == 27:  # ESC
-                cv2.destroyWindow(self.window_name)
+                # 不要 destroyWindow，直接 return
                 return  # 返回主選單
             elif key == ord('1'):
                 self.note_speed = 4
