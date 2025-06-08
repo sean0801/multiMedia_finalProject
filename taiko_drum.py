@@ -437,4 +437,3 @@ class TaikoDrum(GameBase):
             elif key != 255:
                 self.handle_event(key)
         self.show_result()
-
