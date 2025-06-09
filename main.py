@@ -215,7 +215,7 @@ def main_loop():
                         pressed_keys.discard(k)
 
     # --- 程式結束前的清理 ---
-    pygame.quit()  # 正常關閉 Pygame
+    pygame.quit()  # 正常關閉  Pygame
     cv2.destroyAllWindows()
 
 

@@ -253,7 +253,7 @@ class WhacAMole(GameBase):
                 print("背景音樂播放失敗:", e)
 
             # 偵測是否離開 WhacAMole（例如你有個自訂 flag 或在 main 停掉它時調用 stop_music）
-            # 這裡不需要檢查 state，因為只要 WhacAMole 實例還在執行就會進入 update()
+            # 這裡不需要檢查 state，因為只要 WhacAMole  實例還在執行就會進入 update()
 
         if self.state != "game" and self.state != "countdown":
             pass  # 不中斷執行，繼續保持更新流程
