@@ -79,6 +79,18 @@ class TaikoDrum(GameBase):
         bmb = safe_imread('black_miss_banner.png', (80, 200, 4))
         self.black_miss_banner = cv2.resize(bmb, (200, 80)) if bmb is not None else np.zeros((80, 200, 4), dtype=np.uint8)
         self.miss_banner = None  # (img, show_until_time)
+        self.last_roll_time = 0
+        self.roll_cooldown = 4.0  # 最短間隔，避免太密集
+
+        self.bgm_path = "bgm_moonheart.wav"
+        self.bgm_length = 0
+        try:
+            bgm_sound = pygame.mixer.Sound(self.bgm_path)
+            self.bgm_length = bgm_sound.get_length()
+        except Exception as e:
+            print(f"警告：背景音樂載入失敗: {e}")
+            self.bgm_length = 0
+        self.bgm_start_time = None
 
     def play_sound(self, sound):
         if sound is None:
@@ -89,41 +101,45 @@ class TaikoDrum(GameBase):
             print(f"播放音效失敗: {e}")
 
     def start_new_group(self):
-        note_count = random.choice([2, 4, 6])
-        min_interval = 0.3
-        max_time = self.group_interval
-        times = []
-        t = random.uniform(0, max_time - (note_count - 1) * min_interval)
-        for i in range(note_count):
-            times.append(t)
-            if i < note_count - 1:
-                t += random.uniform(min_interval,
-                                    (max_time - t) / (note_count - i - 1) if (note_count - i - 1) > 0 else min_interval)
+        if not hasattr(self, 'roll_groups'):
+            self.roll_groups = set()
+        if not hasattr(self, 'forbidden_groups'):
+            self.forbidden_groups = set()
+        if not hasattr(self, 'last_roll_group'):
+            self.last_roll_group = -10
+
+        now = time.time()
+        group_idx = int(now // self.group_interval)
+        roll_prob = 1.0 / 10.0
+        # 只在間隔夠遠時才產生 roll
+        if (group_idx - self.last_roll_group >= 4) and (random.random() < roll_prob):
+            # forbidden-roll-forbidden
+            self.forbidden_groups.update([group_idx, group_idx+2])
+            self.roll_groups.add(group_idx+1)
+            self.last_roll_group = group_idx+1
 
         notes = []
-        # 平均30秒2次roll => 每個group出現roll的機率 = group_interval / 15
-        roll_prob = min(1.0, self.group_interval / 15.0)
-        roll_info = None
-        if random.random() < roll_prob:
-            roll_duration = random.uniform(2, 4)
-            max_roll_start = max_time - roll_duration
-            if max_roll_start > 0:
-                roll_start = random.uniform(0, max_roll_start)
-                roll_end = roll_start + roll_duration
-                roll_info = (roll_start, roll_end)
-                notes.append({'time': roll_start + 1, 'type': 'roll', 'duration': roll_duration - 2})
-        # 產生 A/L 音符，避開 roll 的 0~1, roll本體, roll_end~roll_end+1 區間
-        for tt in times:
-            overlap = False
-            if roll_info:
-                r_start, r_end = roll_info
-                forbidden = [ (r_start, r_start+1), (r_start+1, r_end), (r_end, r_end+1) ]
-                for f_start, f_end in forbidden:
-                    if f_start < tt < f_end:
-                        overlap = True
-                        break
-            if not overlap:
+        # roll 只在 roll_groups 產生
+        if group_idx in self.roll_groups:
+            notes.append({'time': 0.0, 'type': 'roll', 'duration': self.group_interval})
+        # forbidden group 什麼都不產生
+        elif group_idx in self.forbidden_groups:
+            pass
+        # 其他 group 才產生 A/L 音符
+        else:
+            note_count = random.choice([2, 4, 6])
+            min_interval = 0.3
+            max_time = self.group_interval
+            times = []
+            t = random.uniform(0, max_time - (note_count - 1) * min_interval)
+            for i in range(note_count):
+                times.append(t)
+                if i < note_count - 1:
+                    t += random.uniform(min_interval,
+                                        (max_time - t) / (note_count - i - 1) if (note_count - i - 1) > 0 else min_interval)
+            for tt in times:
                 notes.append({'time': tt, 'type': random.choice(['left', 'right'])})
+
         self.group_notes = [(n['time'], n) for n in notes]
         self.group_notes.sort()
         self.group_note_idx = 0
@@ -150,6 +166,7 @@ class TaikoDrum(GameBase):
         for note in self.notes:
             if note['type'] == 'roll':
                 note['x'] -= self.note_speed
+                note['end_x'] -= self.note_speed  # 修正：roll note 的 end_x 也要跟著移動
                 # 判斷 roll note 是否離開判定區
                 if note['roll_active'] and note['x'] < self.judge_x - 45:
                     note['roll_active'] = False
@@ -183,12 +200,16 @@ class TaikoDrum(GameBase):
         if key == ord('a') or key == ord('l'):
             for note in self.notes:
                 if note['type'] == 'roll' and note['roll_active']:
-                    if abs(note['x'] - self.judge_x) <= 45:
+                    # 判斷 roll 條範圍
+                    roll_left = min(note['x'], note['end_x'])
+                    roll_right = max(note['x'], note['end_x'])
+                    if roll_left - 45 <= self.judge_x <= roll_right + 45:
                         note['roll_hits'] += 1
                         self.combo += 1
-                        self.last_combo_bonus = 1
+                        self.score += 3  # 每次敲擊直接給 perfect 分數
+                        self.last_combo_bonus = self.combo
                         self.play_sound(self.adrum_sound if key == ord('a') else self.ldrum_sound)
-                        self.judge_text = ("Roll!", (255,0,255), now + 0.2)
+                        self.judge_text = ("Perfect", (0,0,255), now + 0.2)
                         hit = True
                         break
             if not hit:
@@ -196,6 +217,7 @@ class TaikoDrum(GameBase):
                     if not note.get('hit', False) and not note.get('miss', False) and note['type'] != 'roll':
                         dx = abs(note['x'] - self.judge_x)
                         if dx <= 45:
+                            # 有音符進入判定區，判斷是否按對
                             if note['type'] == 'left' and key == ord('a'):
                                 note['hit'] = True
                                 self.combo += 1
@@ -232,22 +254,20 @@ class TaikoDrum(GameBase):
                                 hit = True
                                 self.play_sound(self.ldrum_sound)
                                 break
-                if not hit:
-                    self.combo = 0
-                    self.last_combo_bonus = 0
-                    self.play_sound(self.wrong_sound)
-                    self.judge_text = ("Miss", (0,0,0), now + 0.5)
-                    miss_type = None
-                    for note in self.notes:
-                        if not note['hit'] and not note['miss'] and abs(note['x'] - self.judge_x) < 30:
-                            miss_type = note['type']
-                            break
-                    if miss_type == 'left':
-                        self.miss_banner = (self.a_miss_banner, now + 0.5)
-                    elif miss_type == 'right':
-                        self.miss_banner = (self.l_miss_banner, now + 0.5)
-                    else:
-                        self.miss_banner = (self.black_miss_banner, now + 0.5)
+                            else:
+                                # 有音符進入判定區但按錯鍵，miss
+                                note['miss'] = True
+                                self.combo = 0
+                                self.last_combo_bonus = 0
+                                self.play_sound(self.wrong_sound)
+                                self.judge_text = ("Miss", (0,0,0), now + 0.5)
+                                if note['type'] == 'left':
+                                    self.miss_banner = (self.a_miss_banner, now + 0.5)
+                                else:
+                                    self.miss_banner = (self.l_miss_banner, now + 0.5)
+                                hit = True
+                                break
+            # 如果沒有音符進入判定區，什麼都不做，不 miss，不重置 combo
 
     def overlay_image(self, background, overlay, x, y):
         """將 overlay 圖片（含 alpha）貼到 background 上 (左上角 x, y)，自動處理邊界"""
@@ -293,6 +313,12 @@ class TaikoDrum(GameBase):
         frame = self.background.copy()
         center_y = self.center_y
         center = (self.judge_x, center_y)
+        # 顯示右上角剩餘時間
+        if self.bgm_length > 0 and self.bgm_start_time is not None:
+            elapsed = time.time() - self.bgm_start_time
+            remain = max(0, int(self.bgm_length - elapsed))
+            min_sec = f"{remain//60:02d}:{remain%60:02d}"
+            self.draw_text_with_outline(frame, f"moonheart {min_sec}", (self.screen_size[0]-380, 50), self.font, 1.2, (255,225,225), 3, outline_color=(0,0,0), outline_thickness=6)
         # 移除miss音符淡出效果與miss_banner顯示
         for note in self.notes:
             if note['type'] == 'roll':
@@ -301,10 +327,8 @@ class TaikoDrum(GameBase):
                 x1 = int(note['x'])
                 roll_len = int(self.note_speed * (note['duration'] * 1000 / 30))
                 x2 = x1 - roll_len
-                radius = h // 2
-                cv2.rectangle(frame, (x2 + radius, y), (x1 + 100 - radius, y + h), (255,0,255), -1)
-                cv2.ellipse(frame, (x2 + radius, y + radius), (radius, radius), 0, 90, 270, (255,0,255), -1)
-                cv2.ellipse(frame, (x1 + 100 - radius, y + radius), (radius, radius), 0, -90, 90, (255,0,255), -1)
+                # 只畫矩形，不畫圓滑頭尾
+                cv2.rectangle(frame, (x2, y), (x1 + 100, y + h), (255,0,255), -1)
                 cv2.putText(frame, f"ROLL!", (x1, y-10), self.font, 0.8, (255,0,255), 2)
             else:
                 x = int(note['x']) - 40
@@ -404,6 +428,7 @@ class TaikoDrum(GameBase):
         # align main.py: font_scale=1.5, thickness=3
         draw_text_with_outline(img, "1. Easy (Slow)", (360, 235), self.font, 1.0, (0,255,0), 3)
         draw_text_with_outline(img, "2. Normal (Medium)", (360, 335), self.font, 1.0, (255,255,0), 3)
+        draw_text_with_outline(img, "3. Difficult (Fast)", (360, 435), self.font, 1.0, (255,0,0), 3)
         draw_text_with_outline(img, "ESC to back", (100, 550), self.font, 1, (180,180,180), 2)
         cv2.imshow(WINDOW_NAME, img)
 
@@ -412,18 +437,32 @@ class TaikoDrum(GameBase):
         selecting_difficulty = True
         while selecting_difficulty:
             self.show_difficulty_menu()
-            key = cv2.waitKey(30) & 0xFF
+            key = cv2.waitKey(10) & 0xFF
             if key == 27:  # ESC
-                # 不要 destroyWindow，直接 return
                 return  # 返回主選單
             elif key == ord('1'):
-                self.note_speed = 4
+                self.note_speed = 2
                 self.group_interval = 2.5
                 selecting_difficulty = False
             elif key == ord('2'):
-                self.note_speed = 6
-                self.group_interval = 2.0
+                self.note_speed = 4
+                self.group_interval = 1.5
                 selecting_difficulty = False
+            elif key == ord('3'):
+                self.note_speed = 7
+                self.group_interval = 1.5
+                selecting_difficulty = False
+        # 播放背景音樂
+        if self.bgm_length > 0:
+            try:
+                pygame.mixer.music.load(self.bgm_path)
+                pygame.mixer.music.play()
+                self.bgm_start_time = time.time()
+            except Exception as e:
+                print(f"背景音樂播放失敗: {e}")
+                self.bgm_start_time = None
+        else:
+            self.bgm_start_time = None
         # 遊戲主循環
         self.max_combo = 0
         while True:
@@ -431,9 +470,15 @@ class TaikoDrum(GameBase):
             self.render()
             if self.combo > getattr(self, 'max_combo', 0):
                 self.max_combo = self.combo
-            key = cv2.waitKey(30) & 0xFF
+            # 判斷剩餘時間
+            if self.bgm_length > 0 and self.bgm_start_time is not None:
+                elapsed = time.time() - self.bgm_start_time
+                if elapsed >= self.bgm_length:
+                    break
+            key = cv2.waitKey(10) & 0xFF
             if key == 27:  # ESC
                 break
             elif key != 255:
                 self.handle_event(key)
+        pygame.mixer.music.stop()
         self.show_result()

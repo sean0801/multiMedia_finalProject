@@ -20,12 +20,33 @@ blank_bg = lambda: np.ones((SCREEN_SIZE[1], SCREEN_SIZE[0], 3), dtype=np.uint8) 
 piano_surface = pygame.Surface(SCREEN_SIZE)
 
 games = {
-    "Whac-A-Mole": None,  # 延遲初始化
-    "Taiko Drum": None,  # 進入時再根據難度建立
-    "12-Key Piano": None  # 延遲初始化
+    "1. Whac-A-Mole": None,  # 延遲初始化
+    "2. Taiko Drum": None,  # 進入時再根據難度建立
+    "3. 12-Key Piano": None  # 延遲初始化
 }
 current_game = None
 font = cv2.FONT_HERSHEY_SIMPLEX
+
+
+def draw_rounded_rect(img, top_left, bottom_right, radius, color, thickness=-1):
+    x1, y1 = top_left
+    x2, y2 = bottom_right
+    if thickness < 0:
+        overlay = img.copy()
+        cv2.rectangle(overlay, (x1 + radius, y1), (x2 - radius, y2), color, -1)
+        cv2.rectangle(overlay, (x1, y1 + radius), (x2, y2 - radius), color, -1)
+        cv2.circle(overlay, (x1 + radius, y1 + radius), radius, color, -1)
+        cv2.circle(overlay, (x2 - radius, y1 + radius), radius, color, -1)
+        cv2.circle(overlay, (x1 + radius, y2 - radius), radius, color, -1)
+        cv2.circle(overlay, (x2 - radius, y2 - radius), radius, color, -1)
+        cv2.addWeighted(overlay, 1, img, 0, 0, img)
+    else:
+        cv2.rectangle(img, (x1 + radius, y1), (x2 - radius, y2), color, thickness)
+        cv2.rectangle(img, (x1, y1 + radius), (x2, y2 - radius), color, thickness)
+        cv2.ellipse(img, (x1 + radius, y1 + radius), (radius, radius), 180, 0, 90, color, thickness)
+        cv2.ellipse(img, (x2 - radius, y1 + radius), (radius, radius), 270, 0, 90, color, thickness)
+        cv2.ellipse(img, (x1 + radius, y2 - radius), (radius, radius), 90, 0, 90, color, thickness)
+        cv2.ellipse(img, (x2 - radius, y2 - radius), (radius, radius), 0, 0, 90, color, thickness)
 
 
 def show_lobby():
@@ -35,12 +56,58 @@ def show_lobby():
         img = cv2.resize(bg_img, SCREEN_SIZE)
     else:
         img = blank_bg()
-    y = 150
-    for i, name in enumerate(games):
-        text = f"{i + 1}. {name}"
-        cv2.putText(img, text, (100, y), font, 1.5, (255, 255, 255), 3)
-        y += 80
-    cv2.putText(img, "ESC to quit", (100, 550), font, 1, (180, 180, 180), 2)
+    button_width, button_height = 350, 70
+    spacing = 40
+    labels = list(games.keys())
+    # 個別設定每個按鈕的位置偏移
+    button_positions = [
+        # (x_offset, y_offset)
+        # x大->右移 y大->下移
+        (-200, 320),   # 1. Whac-A-Mole
+        (40, 110),     # 2. Taiko Drum
+        (250, 165),    # 3. 12-Key Piano
+    ]
+    # 個別設定每個按鈕的寬高（以裝得下文字為前提）
+    button_sizes = []
+    font_scale = 0.8
+    font_thickness = 2
+    padding_x = 32
+    padding_y = 16
+    for label in labels:
+        text_size, _ = cv2.getTextSize(label, font, font_scale, font_thickness)
+        w = text_size[0] + padding_x * 2
+        h = text_size[1] + padding_y * 2
+        button_sizes.append((w, h))
+    y_start = 180
+    for i, label in enumerate(labels):
+        button_width, button_height = button_sizes[i]
+        x = (SCREEN_SIZE[0] - button_width) // 2 + button_positions[i][0]
+        y = y_start + i * (button_height + spacing) + button_positions[i][1]
+        # 黑底白字
+        color = (0, 0, 0)
+        self_text_color = (255, 255, 255)
+        draw_rounded_rect(img, (x, y), (x + button_width, y + button_height), 15, color)
+        text_size, _ = cv2.getTextSize(label, font, font_scale, font_thickness)
+        text_x = x + (button_width - text_size[0]) // 2
+        text_y = y + (button_height + text_size[1]) // 2
+        cv2.putText(img, label, (text_x, text_y), font, font_scale, self_text_color, font_thickness)
+    # ESC to quit 也用黑底白字，並自動根據文字大小決定背景大小
+    esc_text = "ESC to quit"
+    esc_font_scale = 0.8
+    esc_font_thickness = 2
+    esc_padding_x = 32
+    esc_padding_y = 16
+    (esc_text_size, _) = cv2.getTextSize(esc_text, font, esc_font_scale, esc_font_thickness)
+    esc_w2 = esc_text_size[0] + esc_padding_x * 2
+    esc_h2 = esc_text_size[1] + esc_padding_y * 2
+    esc_x = SCREEN_SIZE[0] - esc_w2 - 50  # 右邊留 50px 邊距
+    esc_y = 30  # 上方留 30px 邊距
+    color = (0, 0, 0)
+    self_text_color = (255, 255, 255)
+    draw_rounded_rect(img, (esc_x, esc_y), (esc_x + esc_w2, esc_y + esc_h2), 15, color)
+    text_x = esc_x + (esc_w2 - esc_text_size[0]) // 2
+    text_y = esc_y + (esc_h2 + esc_text_size[1]) // 2
+    cv2.putText(img, esc_text, (text_x, text_y), font, esc_font_scale, self_text_color, esc_font_thickness)
     cv2.imshow(WINDOW_NAME, img)
 
 
@@ -51,23 +118,22 @@ def main_loop():
         if current_game is None:
             show_lobby()
         else:
-            if current_game == "Taiko Drum":
+            if current_game == "2. Taiko Drum":
                 from taiko_drum import TaikoDrum
                 TaikoDrum().main_loop()
                 current_game = None
                 continue
-            elif current_game == games["Whac-A-Mole"]:
+            elif current_game == games["1. Whac-A-Mole"]:
                 frame = current_game.render()
                 cv2.imshow(WINDOW_NAME, frame)
                 current_game.update()
-                # current_game.render() # render() 已在上面調用，避免重複
-            elif current_game == games["12-Key Piano"]:
+            elif current_game == games["3. 12-Key Piano"]:
                 piano_surface.fill((60, 60, 60))
                 # 確保 piano game 物件有 screen surface
-                if games["12-Key Piano"].screen is None:
-                    games["12-Key Piano"].screen = piano_surface
-                games["12-Key Piano"].update()
-                games["12-Key Piano"].render()
+                if games["3. 12-Key Piano"].screen is None:
+                    games["3. 12-Key Piano"].screen = piano_surface
+                games["3. 12-Key Piano"].update()
+                games["3. 12-Key Piano"].render()
                 piano_array = pygame.surfarray.array3d(piano_surface)
                 piano_array = np.transpose(piano_array, (1, 0, 2))
                 cv2.imshow(WINDOW_NAME, cv2.cvtColor(piano_array, cv2.COLOR_RGB2BGR))
@@ -81,7 +147,7 @@ def main_loop():
             else:
                 # 在遊戲中按 ESC，返回大廳
                 # 清理鋼琴遊戲可能殘留的按鍵狀態
-                if current_game == games["12-Key Piano"] and pressed_keys:
+                if current_game == games["3. 12-Key Piano"] and pressed_keys:
                     class DummyEvent:
                         def __init__(self, type_, key_):
                             self.type = type_
@@ -108,21 +174,21 @@ def main_loop():
         # --- 根據當前狀態處理按鍵 ---
         if current_game is None:  # --- 在大廳時 ---
             if key == ord('1'):
-                if games["Whac-A-Mole"] is None:
+                if games["1. Whac-A-Mole"] is None:
                     from whac_a_mole import WhacAMole
-                    games["Whac-A-Mole"] = WhacAMole()
-                current_game = games["Whac-A-Mole"]
+                    games["1. Whac-A-Mole"] = WhacAMole()
+                current_game = games["1. Whac-A-Mole"]
                 cv2.setMouseCallback(WINDOW_NAME, current_game.on_mouse_click)
             elif key == ord('2'):
-                current_game = "Taiko Drum"
+                current_game = "2. Taiko Drum"
             elif key == ord('3'):
-                if games["12-Key Piano"] is None:
+                if games["3. 12-Key Piano"] is None:
                     from piano_12keys import Piano12Keys
-                    games["12-Key Piano"] = Piano12Keys(piano_surface)
-                current_game = games["12-Key Piano"]
+                    games["3. 12-Key Piano"] = Piano12Keys(piano_surface)
+                current_game = games["3. 12-Key Piano"]
 
         else:  # --- 在遊戲中時 ---
-            if current_game == games["12-Key Piano"]:
+            if current_game == games["3. 12-Key Piano"]:
                 class DummyEvent:
                     def __init__(self, type_, key_):
                         self.type = type_
