@@ -92,10 +92,11 @@ class TaikoDrum(GameBase):
             self.bgm_length = 0
         self.bgm_start_time = None
 
-    def play_sound(self, sound):
+    def play_sound(self, sound, volume=1.0):
         if sound is None:
             return
         try:
+            sound.set_volume(volume)
             sound.play()
         except Exception as e:
             print(f"播放音效失敗: {e}")
@@ -200,15 +201,15 @@ class TaikoDrum(GameBase):
         if key == ord('a') or key == ord('l'):
             for note in self.notes:
                 if note['type'] == 'roll' and note['roll_active']:
-                    # 判斷 roll 條範圍
                     roll_left = min(note['x'], note['end_x'])
                     roll_right = max(note['x'], note['end_x'])
                     if roll_left - 45 <= self.judge_x <= roll_right + 45:
                         note['roll_hits'] += 1
                         self.combo += 1
-                        self.score += 3  # 每次敲擊直接給 perfect 分數
+                        self.score += 3
                         self.last_combo_bonus = self.combo
-                        self.play_sound(self.adrum_sound if key == ord('a') else self.ldrum_sound)
+                        # roll 一律 100% 音量
+                        self.play_sound(self.adrum_sound if key == ord('a') else self.ldrum_sound, 1.0)
                         self.judge_text = ("Perfect", (0,0,255), now + 0.2)
                         hit = True
                         break
@@ -217,7 +218,6 @@ class TaikoDrum(GameBase):
                     if not note.get('hit', False) and not note.get('miss', False) and note['type'] != 'roll':
                         dx = abs(note['x'] - self.judge_x)
                         if dx <= 45:
-                            # 有音符進入判定區，判斷是否按對
                             if note['type'] == 'left' and key == ord('a'):
                                 note['hit'] = True
                                 self.combo += 1
@@ -225,16 +225,18 @@ class TaikoDrum(GameBase):
                                     self.score += 3
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Perfect", (0,0,255), now + 0.5)
+                                    self.play_sound(self.adrum_sound, 0.1)
                                 elif dx <= 30:  # cool
                                     self.score += 2
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Cool", (0,128,255), now + 0.5)
+                                    self.play_sound(self.adrum_sound, 0.5)
                                 else:  # good
                                     self.score += 1
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Good", (0,255,255), now + 0.5)
+                                    self.play_sound(self.adrum_sound, 1.0)
                                 hit = True
-                                self.play_sound(self.adrum_sound)
                                 break
                             elif note['type'] == 'right' and key == ord('l'):
                                 note['hit'] = True
@@ -243,23 +245,24 @@ class TaikoDrum(GameBase):
                                     self.score += 3
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Perfect", (0,0,255), now + 0.5)
+                                    self.play_sound(self.ldrum_sound, 0.1)
                                 elif dx <= 30:
                                     self.score += 2
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Cool", (0,128,255), now + 0.5)
+                                    self.play_sound(self.ldrum_sound, 0.5)
                                 else:
                                     self.score += 1
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Good", (0,255,255), now + 0.5)
+                                    self.play_sound(self.ldrum_sound, 1.0)
                                 hit = True
-                                self.play_sound(self.ldrum_sound)
                                 break
                             else:
-                                # 有音符進入判定區但按錯鍵，miss
                                 note['miss'] = True
                                 self.combo = 0
                                 self.last_combo_bonus = 0
-                                self.play_sound(self.wrong_sound)
+                                self.play_sound(self.wrong_sound, 1.0)
                                 self.judge_text = ("Miss", (0,0,0), now + 0.5)
                                 if note['type'] == 'left':
                                     self.miss_banner = (self.a_miss_banner, now + 0.5)
@@ -267,7 +270,7 @@ class TaikoDrum(GameBase):
                                     self.miss_banner = (self.l_miss_banner, now + 0.5)
                                 hit = True
                                 break
-            # 如果沒有音符進入判定區，什麼都不做，不 miss，不重置 combo
+        # 如果沒有音符進入判定區，什麼都不做，不 miss，不重置 combo
 
     def overlay_image(self, background, overlay, x, y):
         """將 overlay 圖片（含 alpha）貼到 background 上 (左上角 x, y)，自動處理邊界"""
@@ -432,6 +435,36 @@ class TaikoDrum(GameBase):
         draw_text_with_outline(img, "ESC to back", (100, 550), self.font, 1, (180,180,180), 2)
         cv2.imshow(WINDOW_NAME, img)
 
+    def show_music_menu(self):
+        # 使用 taikodrum_diff_select.png 作為背景
+        bg_img = cv2.imread("taikodrum_diff_select.png")
+        if bg_img is not None:
+            img = cv2.resize(bg_img, self.screen_size)
+        else:
+            img = np.ones((self.screen_size[1], self.screen_size[0], 3), dtype=np.uint8) * 30
+        def draw_text_with_outline(img, text, pos, font, font_scale, color, thickness=3, outline_color=(0,0,0), outline_thickness=6):
+            cv2.putText(img, text, pos, font, font_scale, outline_color, outline_thickness, cv2.LINE_AA)
+            cv2.putText(img, text, pos, font, font_scale, color, thickness, cv2.LINE_AA)
+        draw_text_with_outline(img, "1. Moon Heart", (360, 235), self.font, 1.0, (255,200,200), 3)
+        draw_text_with_outline(img, "2. Moonlight", (360, 335), self.font, 1.0, (200,200,255), 3)
+        draw_text_with_outline(img, "ESC to back", (100, 550), self.font, 1, (180,180,180), 2)
+        cv2.imshow(WINDOW_NAME, img)
+
+    def show_crush_question(self):
+        # 使用 taikodrum_diff_select.png 作為背景
+        bg_img = cv2.imread("taikodrum_diff_select.png")
+        if bg_img is not None:
+            img = cv2.resize(bg_img, self.screen_size)
+        else:
+            img = np.ones((self.screen_size[1], self.screen_size[0], 3), dtype=np.uint8) * 30
+        def draw_text_with_outline(img, text, pos, font, font_scale, color, thickness=3, outline_color=(0,0,0), outline_thickness=6):
+            cv2.putText(img, text, pos, font, font_scale, outline_color, outline_thickness, cv2.LINE_AA)
+            cv2.putText(img, text, pos, font, font_scale, color, thickness, cv2.LINE_AA)
+        # 位置與 show_music_menu 對齊
+        draw_text_with_outline(img, "Is your crush watching?", (360, 235), self.font, 1.0, (255,255,255), 3)
+        draw_text_with_outline(img, "Y / N", (360, 335), self.font, 1.0, (255,255,0), 3)
+        cv2.imshow(WINDOW_NAME, img)
+
     def main_loop(self):
         # 不再呼叫 cv2.namedWindow，主程式已建立
         selecting_difficulty = True
@@ -452,6 +485,45 @@ class TaikoDrum(GameBase):
                 self.note_speed = 7
                 self.group_interval = 1.5
                 selecting_difficulty = False
+        # 新增：音樂選擇
+        selecting_music = True
+        while selecting_music:
+            self.show_music_menu()
+            key = cv2.waitKey(10) & 0xFF
+            if key == 27:  # ESC
+                return  # 返回主選單
+            elif key == ord('1'):
+                self.bgm_path = "bgm_moonheart.wav"
+                try:
+                    bgm_sound = pygame.mixer.Sound(self.bgm_path)
+                    self.bgm_length = bgm_sound.get_length()
+                except Exception as e:
+                    print(f"警告：背景音樂載入失敗: {e}")
+                    self.bgm_length = 0
+                selecting_music = False
+            elif key == ord('2'):
+                self.bgm_path = "bgm_moonlight.wav"
+                try:
+                    bgm_sound = pygame.mixer.Sound(self.bgm_path)
+                    self.bgm_length = bgm_sound.get_length()
+                except Exception as e:
+                    print(f"警告：背景音樂載入失敗: {e}")
+                    self.bgm_length = 0
+                selecting_music = False
+        # 新增：詢問 crush 是否在看
+        selecting_crush = True
+        self.crush_mode = False  # 新增：記錄crush模式
+        while selecting_crush:
+            self.show_crush_question()
+            key = cv2.waitKey(10) & 0xFF
+            if key == ord('y') or key == ord('Y'):
+                self.crush_mode = True
+                selecting_crush = False
+            elif key == ord('n') or key == ord('N'):
+                self.crush_mode = False
+                selecting_crush = False
+            elif key == 27:  # ESC
+                return  # 返回主選單
         # 播放背景音樂
         if self.bgm_length > 0:
             try:
@@ -465,8 +537,46 @@ class TaikoDrum(GameBase):
             self.bgm_start_time = None
         # 遊戲主循環
         self.max_combo = 0
+        auto_roll_timer = 0
+        auto_roll_last = 0
+        auto_roll_key = 'a'  # 交替A/L
         while True:
             self.update()
+            # crush模式自動判定
+            if self.crush_mode:
+                now = time.time()
+                # 處理普通音符
+                for note in self.notes:
+                    if note['type'] != 'roll' and not note.get('hit', False) and not note.get('miss', False):
+                        dx = abs(note['x'] - self.judge_x)
+                        if dx <= 15:
+                            # 自動判定perfect
+                            note['hit'] = True
+                            self.combo += 1
+                            self.score += 3
+                            self.last_combo_bonus = self.combo
+                            self.judge_text = ("Perfect", (0,0,255), now + 0.5)
+                            # 播放音效（自動交替A/L）
+                            if note['type'] == 'left':
+                                self.play_sound(self.adrum_sound, 0.1)
+                            else:
+                                self.play_sound(self.ldrum_sound, 0.1)
+                    # 處理roll音符
+                    if note['type'] == 'roll' and note.get('roll_active', False):
+                        # 每0.1秒自動交替A/L
+                        if now - auto_roll_last > 0.1:
+                            note['roll_hits'] += 1
+                            self.combo += 1
+                            self.score += 3
+                            self.last_combo_bonus = self.combo
+                            self.judge_text = ("Perfect", (0,0,255), now + 0.2)
+                            if auto_roll_key == 'a':
+                                self.play_sound(self.adrum_sound, 1.0)
+                                auto_roll_key = 'l'
+                            else:
+                                self.play_sound(self.ldrum_sound, 1.0)
+                                auto_roll_key = 'a'
+                            auto_roll_last = now
             self.render()
             if self.combo > getattr(self, 'max_combo', 0):
                 self.max_combo = self.combo
@@ -478,7 +588,9 @@ class TaikoDrum(GameBase):
             key = cv2.waitKey(10) & 0xFF
             if key == 27:  # ESC
                 break
-            elif key != 255:
-                self.handle_event(key)
+            if not self.crush_mode:
+                if key != 255:
+                    self.handle_event(key)
+            # crush模式下A/L無效，只能ESC
         pygame.mixer.music.stop()
         self.show_result()
