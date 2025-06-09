@@ -55,6 +55,11 @@ class TaikoDrum(GameBase):
         except Exception as e:
             print(f"警告：Wrong.wav 載入失敗: {e}")
             self.wrong_sound = None
+        try:
+            self.taiko_select_sound = pygame.mixer.Sound("taiko_select_sound.wav")
+        except Exception as e:
+            print(f"警告：taiko_select_sound.wav 載入失敗: {e}")
+            self.taiko_select_sound = None
 
         # 載入圖片（等比例縮放），先判斷是否載入成功
         def safe_imread(path, fallback_shape=None):
@@ -100,6 +105,9 @@ class TaikoDrum(GameBase):
             sound.play()
         except Exception as e:
             print(f"播放音效失敗: {e}")
+
+    def play_select_sound(self):
+        self.play_sound(self.taiko_select_sound, 0.7)
 
     def start_new_group(self):
         if not hasattr(self, 'roll_groups'):
@@ -619,16 +627,20 @@ class TaikoDrum(GameBase):
             self.show_difficulty_menu()
             key = cv2.waitKey(10) & 0xFF
             if key == 27:  # ESC
+                self.play_select_sound()
                 return  # 返回主選單
             elif key == ord('1'):
+                self.play_select_sound()
                 self.note_speed = 2
                 self.group_interval = 2.5
                 selecting_difficulty = False
             elif key == ord('2'):
+                self.play_select_sound()
                 self.note_speed = 4
                 self.group_interval = 1.5
                 selecting_difficulty = False
             elif key == ord('3'):
+                self.play_select_sound()
                 self.note_speed = 7
                 self.group_interval = 1.2
                 selecting_difficulty = False
@@ -638,8 +650,10 @@ class TaikoDrum(GameBase):
             self.show_music_menu()
             key = cv2.waitKey(10) & 0xFF
             if key == 27:  # ESC
+                self.play_select_sound()
                 return  # 返回主選單
             elif key == ord('1'):
+                self.play_select_sound()
                 self.bgm_path = "bgm_moonheart.wav"
                 try:
                     bgm_sound = pygame.mixer.Sound(self.bgm_path)
@@ -649,6 +663,7 @@ class TaikoDrum(GameBase):
                     self.bgm_length = 0
                 selecting_music = False
             elif key == ord('2'):
+                self.play_select_sound()
                 self.bgm_path = "bgm_moonlight.wav"
                 try:
                     bgm_sound = pygame.mixer.Sound(self.bgm_path)
@@ -664,12 +679,15 @@ class TaikoDrum(GameBase):
             self.show_crush_question()
             key = cv2.waitKey(10) & 0xFF
             if key == ord('1'):
+                self.play_select_sound()
                 self.crush_mode = True
                 selecting_crush = False
             elif key == ord('2'):
+                self.play_select_sound()
                 self.crush_mode = False
                 selecting_crush = False
             elif key == 27:  # ESC
+                self.play_select_sound()
                 return  # 返回主選單
         # 播放背景音樂
         if self.bgm_length > 0:
