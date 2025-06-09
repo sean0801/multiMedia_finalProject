@@ -70,7 +70,7 @@ class WhacAMole(GameBase):
         except:
             self.mole_hit_sound = None
         try:
-            self.bomb_sound = pygame.mixer.Sound("bomb.wav")  # ← 檔名可替換為你自己的爆炸音檔
+            self.bomb_sound = pygame.mixer.Sound("bomb.wav")
         except:
             self.bomb_sound = None
 
@@ -447,7 +447,7 @@ class WhacAMole(GameBase):
                 )
         else:
             background[y:y+oh, x:x+ow] = overlay[:, :, :3]
-        return background #abd
+        return background
 
     def __del__(self):
         pygame.mixer.music.stop()
