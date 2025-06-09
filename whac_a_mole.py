@@ -67,7 +67,7 @@ class WhacAMole(GameBase):
         except:
             self.mole_hit_sound = None
         try:
-            self.bomb_sound = pygame.mixer.Sound("bomb.wav")  # ← 檔名可替換為你自己的爆炸音檔
+            self.bomb_sound = pygame.mixer.Sound("bomb.wav")
         except:
             self.bomb_sound = None
 
@@ -79,6 +79,7 @@ class WhacAMole(GameBase):
                 'hit': False,
                 'type': 'mole'  # 新增 type 欄位
             })
+        self.music_playing = False
 
     def draw_rounded_rect(self, img, top_left, bottom_right, radius, color, thickness=-1):
         x1, y1 = top_left
@@ -236,9 +237,26 @@ class WhacAMole(GameBase):
                             mole['state'] = MoleState.DISAPPEARING
                             mole['start'] = pygame.time.get_ticks()
 
+    def stop_music(self):
+        if self.music_playing:
+            pygame.mixer.music.stop()
+            self.music_playing = False
+
     def update(self):
-        if self.state != "game":
-            return
+        if not self.music_playing:
+            try:
+                pygame.mixer.music.load("whac_background_music.wav")
+                pygame.mixer.music.set_volume(1.0)
+                pygame.mixer.music.play(-1)
+                self.music_playing = True
+            except Exception as e:
+                print("背景音樂播放失敗:", e)
+
+            # 偵測是否離開 WhacAMole（例如你有個自訂 flag 或在 main 停掉它時調用 stop_music）
+            # 這裡不需要檢查 state，因為只要 WhacAMole 實例還在執行就會進入 update()
+
+        if self.state != "game" and self.state != "countdown":
+            pass  # 不中斷執行，繼續保持更新流程
 
         now = pygame.time.get_ticks()
 
@@ -443,5 +461,5 @@ class WhacAMole(GameBase):
                 )
         else:
             background[y:y+oh, x:x+ow] = overlay[:, :, :3]
-        return background #abd
+        return background
 

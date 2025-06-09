@@ -145,6 +145,8 @@ def main_loop():
             if current_game is None:
                 break  # 在大廳按 ESC，離開程式
             else:
+                if hasattr(current_game, "stop_music"):
+                    current_game.stop_music()
                 # 在遊戲中按 ESC，返回大廳
                 # 清理鋼琴遊戲可能殘留的按鍵狀態
                 if current_game == games["3. 12-Key Piano"] and pressed_keys:
