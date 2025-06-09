@@ -114,15 +114,15 @@ class TaikoDrum(GameBase):
         roll_prob = 1.0 / 10.0
         # 只在間隔夠遠時才產生 roll
         if (group_idx - self.last_roll_group >= 4) and (random.random() < roll_prob):
-            # forbidden-roll-forbidden
+            # forbidden(預備)-roll本體-forbidden
             self.forbidden_groups.update([group_idx, group_idx+2])
-            self.roll_groups.add(group_idx+1)
+            self.roll_groups.add(group_idx+1)  # 只記錄本體group
             self.last_roll_group = group_idx+1
 
         notes = []
-        # roll 只在 roll_groups 產生
+        # roll本體group才產生roll條
         if group_idx in self.roll_groups:
-            notes.append({'time': 0.0, 'type': 'roll', 'duration': self.group_interval})
+            notes.append({'time': 0.0, 'type': 'roll', 'duration': self.group_interval, 'group_idx': group_idx})
         # forbidden group 什麼都不產生
         elif group_idx in self.forbidden_groups:
             pass
@@ -157,9 +157,9 @@ class TaikoDrum(GameBase):
                now - self.group_start_time >= self.group_notes[self.group_note_idx][0]):
             note_info = self.group_notes[self.group_note_idx][1]
             if note_info['type'] == 'roll':
-                # 修正 roll note 長度計算
+                # roll條本體只在本體group產生，x從右側進場，移動到左側
                 roll_pixel_len = int(self.note_speed * (note_info['duration'] * 1000 / 30))
-                self.notes.append({'x': 800, 'type': 'roll', 'hit': False, 'miss': False, 'roll_hits': 0, 'roll_active': True, 'duration': note_info['duration'], 'start_x': 800, 'end_x': 800 - roll_pixel_len})
+                self.notes.append({'x': 800, 'type': 'roll', 'hit': False, 'miss': False, 'roll_hits': 0, 'roll_active': True, 'duration': note_info['duration'], 'start_x': 800, 'end_x': 800 - roll_pixel_len, 'group_idx': note_info['group_idx']})
             else:
                 self.notes.append({'x': 800, 'type': note_info['type'], 'hit': False, 'miss': False})
             self.group_note_idx += 1
@@ -167,11 +167,10 @@ class TaikoDrum(GameBase):
         for note in self.notes:
             if note['type'] == 'roll':
                 note['x'] -= self.note_speed
-                note['end_x'] -= self.note_speed  # 修正：roll note 的 end_x 也要跟著移動
-                # 判斷 roll note 是否離開判定區
+                note['end_x'] -= self.note_speed
+                # 只在roll本體group期間才允許判定
                 if note['roll_active'] and note['x'] < self.judge_x - 45:
                     note['roll_active'] = False
-                    # 離開時根據 roll_hits 給分
                     self.score += note['roll_hits']
                     self.judge_text = (f"Roll+{note['roll_hits']}", (255,0,255), now + 0.7)
             else:
@@ -187,29 +186,49 @@ class TaikoDrum(GameBase):
             self.combo = 0
             self.play_sound(self.wrong_sound)
             self.judge_text = ("Miss", (0,0,0), now + 0.5)
-        # 移除已經完全離開畫面的音符
         self.notes = [n for n in self.notes if n['x'] > 0 and not (n.get('type') == 'roll' and not n['roll_active']) and not n.get('hit', False)]
         if self.miss_banner and now > self.miss_banner[1]:
             self.miss_banner = None
         if self.judge_text and now > self.judge_text[2]:
             self.judge_text = None
 
+    def get_bonus(self):
+        # 根據 combo 決定 bonus 倍率
+        if self.combo <= 9:
+            return 0
+        elif self.combo <= 19:
+            return 1
+        elif self.combo <= 39:
+            return 2
+        elif self.combo <= 59:
+            return 3
+        elif self.combo <= 79:
+            return 4
+        elif self.combo <= 99:
+            return 5
+        else:
+            return 10
+
     def handle_event(self, key):
         hit = False
         now = time.time()
         self.last_combo_bonus = 0
+        bonus = self.get_bonus()  # 取得當前bonus
         if key == ord('a') or key == ord('l'):
             for note in self.notes:
                 if note['type'] == 'roll' and note['roll_active']:
+                    # Debug: 印出group_idx與now//group_interval
+                    print(f"[DEBUG] 判定時: note['group_idx']={note.get('group_idx')}, now_group={int(now // self.group_interval)}, note['x']={note['x']}, note['end_x']={note['end_x']}, judge_x={self.judge_x}")
+                    # 僅根據 roll note 的 x~end_x 是否覆蓋判定區來判斷
                     roll_left = min(note['x'], note['end_x'])
                     roll_right = max(note['x'], note['end_x'])
+                    print(f"[DEBUG] 判定區間: roll_left={roll_left}, roll_right={roll_right}, judge_x={self.judge_x}")
                     if roll_left - 45 <= self.judge_x <= roll_right + 45:
                         note['roll_hits'] += 1
                         self.combo += 1
-                        self.score += 3
+                        self.score += 3 + bonus  # 加上bonus
                         self.last_combo_bonus = self.combo
-                        # roll 一律 100% 音量
-                        self.play_sound(self.adrum_sound if key == ord('a') else self.ldrum_sound, 1.0)
+                        self.play_sound(self.adrum_sound if key == ord('a') else self.ldrum_sound, 0.25)
                         self.judge_text = ("Perfect", (0,0,255), now + 0.2)
                         hit = True
                         break
@@ -222,17 +241,17 @@ class TaikoDrum(GameBase):
                                 note['hit'] = True
                                 self.combo += 1
                                 if dx <= 15:  # perfect
-                                    self.score += 3
+                                    self.score += 3 + bonus
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Perfect", (0,0,255), now + 0.5)
-                                    self.play_sound(self.adrum_sound, 0.1)
+                                    self.play_sound(self.adrum_sound, 0.25)
                                 elif dx <= 30:  # cool
-                                    self.score += 2
+                                    self.score += 2 + bonus
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Cool", (0,128,255), now + 0.5)
                                     self.play_sound(self.adrum_sound, 0.5)
                                 else:  # good
-                                    self.score += 1
+                                    self.score += 1 + bonus
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Good", (0,255,255), now + 0.5)
                                     self.play_sound(self.adrum_sound, 1.0)
@@ -242,17 +261,17 @@ class TaikoDrum(GameBase):
                                 note['hit'] = True
                                 self.combo += 1
                                 if dx <= 15:
-                                    self.score += 3
+                                    self.score += 3 + bonus
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Perfect", (0,0,255), now + 0.5)
-                                    self.play_sound(self.ldrum_sound, 0.1)
+                                    self.play_sound(self.ldrum_sound, 0.25)
                                 elif dx <= 30:
-                                    self.score += 2
+                                    self.score += 2 + bonus
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Cool", (0,128,255), now + 0.5)
                                     self.play_sound(self.ldrum_sound, 0.5)
                                 else:
-                                    self.score += 1
+                                    self.score += 1 + bonus
                                     self.last_combo_bonus = self.combo
                                     self.judge_text = ("Good", (0,255,255), now + 0.5)
                                     self.play_sound(self.ldrum_sound, 1.0)
@@ -321,18 +340,29 @@ class TaikoDrum(GameBase):
             elapsed = time.time() - self.bgm_start_time
             remain = max(0, int(self.bgm_length - elapsed))
             min_sec = f"{remain//60:02d}:{remain%60:02d}"
-            self.draw_text_with_outline(frame, f"moonheart {min_sec}", (self.screen_size[0]-380, 50), self.font, 1.2, (255,225,225), 3, outline_color=(0,0,0), outline_thickness=6)
+            # 根據bgm_path顯示曲名
+            if 'moonlight' in self.bgm_path:
+                song_name = 'moonlight'
+            else:
+                song_name = 'moonheart'
+            self.draw_text_with_outline(frame, f"{song_name} {min_sec}", (self.screen_size[0]-380, 50), self.font, 1.2, (255,225,225), 3, outline_color=(0,0,0), outline_thickness=6)
         # 移除miss音符淡出效果與miss_banner顯示
         for note in self.notes:
             if note['type'] == 'roll':
-                y = center_y - 30  # roll條置中
-                h = 60
+                y = center_y - 16  # roll條置中, 高度減半
+                h = 32
                 x1 = int(note['x'])
                 roll_len = int(self.note_speed * (note['duration'] * 1000 / 30))
                 x2 = x1 - roll_len
-                # 只畫矩形，不畫圓滑頭尾
-                cv2.rectangle(frame, (x2, y), (x1 + 100, y + h), (255,0,255), -1)
-                cv2.putText(frame, f"ROLL!", (x1, y-10), self.font, 0.8, (255,0,255), 2)
+                color = (255,0,255)
+                # 畫主體矩形（不含頭尾半圓區域）
+                if x1 - h//2 > x2 + h//2:
+                    cv2.rectangle(frame, (x2 + h//2, y), (x1 - h//2, y + h), color, -1)
+                # 畫左側半圓（頭）
+                cv2.ellipse(frame, (x2 + h//2, y + h//2), (h//2, h//2), 0, 90, 270, color, -1)
+                # 畫右側半圓（尾）
+                cv2.ellipse(frame, (x1 - h//2, y + h//2), (h//2, h//2), 0, 270, 450, color, -1)
+                cv2.putText(frame, f"ROLL!", (x1, y-10), self.font, 0.8, color, 2)
             else:
                 x = int(note['x']) - 40
                 y = center_y - 40  # A/L音符置中
@@ -375,18 +405,20 @@ class TaikoDrum(GameBase):
                 cv2.rectangle(frame, (bar_x + i*bar_w, bar_y), (bar_x + (i+1)*bar_w - 1, bar_y + bar_h), (80,80,80), -1)
         cv2.rectangle(frame, (bar_x, bar_y), (bar_x + total_bar_w, bar_y + bar_h), (255,255,255), 2)
         # combo加成顯示（置中）
-        if self.combo <= 20:
-            bonus = 'x1'
-        elif self.combo <= 40:
-            bonus = 'x2'
-        elif self.combo <= 60:
-            bonus = 'x3'
-        elif self.combo <= 80:
-            bonus = 'x4'
-        elif self.combo <= 100:
-            bonus = 'x5'
+        if self.combo <= 9:
+            bonus = '0'
+        elif self.combo <= 19:
+            bonus = '1'
+        elif self.combo <= 39:
+            bonus = '2'
+        elif self.combo <= 59:
+            bonus = '3'
+        elif self.combo <= 79:
+            bonus = '4'
+        elif self.combo <= 99:
+            bonus = '5'
         else:
-            bonus = 'x10'
+            bonus = '10'
         combo_text = f"Combo: {self.combo}  Bonus: {bonus}"
         (text_w, text_h), _ = cv2.getTextSize(combo_text, self.font, 1.5, 3)
         combo_x = (self.screen_size[0] - text_w) // 2
@@ -395,26 +427,138 @@ class TaikoDrum(GameBase):
         cv2.imshow(WINDOW_NAME, frame)
 
     def show_result(self):
-        frame = np.ones((600, 800, 3), dtype=np.uint8) * 30
-        self.draw_text_with_outline(frame, "Game Over!", (250, 120), self.font, 1.5, (255,255,0), 3, outline_color=(0,0,0), outline_thickness=6)
-        self.draw_text_with_outline(frame, f"Score: {self.score}", (250, 220), self.font, 1.5, (255,255,255), 3, outline_color=(0,0,0), outline_thickness=6)
-        self.draw_text_with_outline(frame, f"Max Combo: {getattr(self, 'max_combo', self.combo)}", (250, 300), self.font, 1.5, (0,255,0), 3, outline_color=(0,0,0), outline_thickness=6)
-        # Show leaderboard
+        # 使用 taikodrum_diff_select.png 作為背景
+        bg_img = cv2.imread("taikodrum_diff_select.png")
+        if bg_img is not None:
+            frame = cv2.resize(bg_img, (800, 600))
+        else:
+            frame = np.ones((600, 800, 3), dtype=np.uint8) * 30
+        # 左2/5區塊半透明白色背景
+        left_width = int(800 * 2 / 5)
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (0, 0), (left_width, 600), (255, 255, 255), -1)
+        alpha = 0.7
+        cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+        # 內容區域
+        content_x = 0
+        content_y = 0
+        content_w = left_width
+        content_h = 600
+        # 主要資訊頂部對齊於白色區塊，Game Over!頂部，分數與Max Combo上下至中，內容超出寬度自動換行
+        lines = [
+            ("Game Over!", 1.5, (255,255,0)),
+            (f"Score: {self.score}", 1.5, (255,255,255)),
+            (f"Max Combo: {getattr(self, 'max_combo', self.combo)}", 1.2, (0,255,0)),
+        ]
+        # Game Over!頂部顯示
+        go_text, go_scale, go_color = lines[0]
+        # 換行處理
+        go_words = go_text.split(' ')
+        go_lines = []
+        line = ''
+        for word in go_words:
+            test_line = (line + ' ' + word).strip()
+            (w, h), _ = cv2.getTextSize(test_line, self.font, go_scale, 3)
+            if w > content_w - 40 and line != '':
+                go_lines.append(line)
+                line = word
+            else:
+                line = test_line
+        if line:
+            go_lines.append(line)
+        go_y = content_y + 40
+        for go_line in go_lines:
+            (go_w, go_h), _ = cv2.getTextSize(go_line, self.font, go_scale, 3)
+            go_x = content_x + (content_w - go_w) // 2
+            self.draw_text_with_outline(frame, go_line, (go_x, go_y + go_h), self.font, go_scale, go_color, 3, outline_color=(0,0,0), outline_thickness=6)
+            go_y += go_h + 18
+        # 分數與Max Combo上下至中，並自動換行
+        info_lines = lines[1:]
+        rendered_lines = []
+        for text, scale, color in info_lines:
+            words = text.split(' ')
+            line = ''
+            for word in words:
+                test_line = (line + ' ' + word).strip()
+                (w, h), _ = cv2.getTextSize(test_line, self.font, scale, 3)
+                if w > content_w - 40 and line != '':
+                    rendered_lines.append((line, scale, color))
+                    line = word
+                else:
+                    line = test_line
+            if line:
+                rendered_lines.append((line, scale, color))
+        # 新增：Leaderboard 行
+        leaderboard_text = "Leaderboard ->"
+        leaderboard_scale = 1.0
+        leaderboard_color = (120, 120, 255)
+        (w, h), _ = cv2.getTextSize(leaderboard_text, self.font, leaderboard_scale, 3)
+        rendered_lines.append((leaderboard_text, leaderboard_scale, leaderboard_color))
+        # 計算分數與Max Combo+Leaderboard總高度
+        total_height = 0
+        heights = []
+        for text, scale, _ in rendered_lines:
+            (w, h), _ = cv2.getTextSize(text, self.font, scale, 3)
+            heights.append(h + 18)
+            total_height += h + 18
+        # 垂直至中（不含Game Over!）
+        start_y = content_y + (content_h - total_height) // 2
+        y = start_y
+        for idx, (text, scale, color) in enumerate(rendered_lines):
+            (w, h), _ = cv2.getTextSize(text, self.font, scale, 3)
+            x = content_x + (content_w - w) // 2
+            if y + h > content_y + content_h - 50:
+                break
+            self.draw_text_with_outline(frame, text, (x, y + h), self.font, scale, color, 3, outline_color=(0,0,0), outline_thickness=6)
+            y += heights[idx]
+        # 取得top3分數，顯示於與難度選單相同位置
         try:
             with open("taiko_rank.txt", "r") as f:
-                lines = f.readlines()
-            ranks = [int(line.strip()) for line in lines]
+                ranks = [int(line.strip()) for line in f.readlines()]
         except:
             ranks = []
         ranks.append(self.score)
-        ranks = sorted(ranks, reverse=True)[:5]
+        ranks = sorted(ranks, reverse=True)[:3]
         with open("taiko_rank.txt", "w") as f:
             for s in ranks:
                 f.write(f"{s}\n")
-        self.draw_text_with_outline(frame, "Leaderboard Top 5:", (250, 370), self.font, 1.2, (255,255,255), 2, outline_color=(0,0,0), outline_thickness=4)
-        for i, s in enumerate(ranks):
-            self.draw_text_with_outline(frame, f"{i+1}. {s}", (270, 420+i*40), self.font, 1.2, (255,200,200), 2, outline_color=(0,0,0), outline_thickness=4)
-        self.draw_text_with_outline(frame, "Press any key to return to menu", (180, 550), self.font, 1, (200,255,255), 2, outline_color=(0,0,0), outline_thickness=3)
+        # 難度選單的 x, y
+        top3_x = 385
+        top3_ys = [265, 395, 525]
+        top3_colors = [ (0,215,255), (192,192,192), (205,127,50) ]  # 金、銀、銅
+        for i, (y_pos, s) in enumerate(zip(top3_ys, ranks)):
+            self.draw_text_with_outline(frame, f"{i+1}. {s}", (top3_x, y_pos), self.font, 1.2, top3_colors[i], 3, outline_color=(0,0,0), outline_thickness=6)
+        # "Press any key to return to menu" 對齊白色底部，超出寬度自動換行
+        press_text = "Press any key to return to menu"
+        press_scale = 1
+        # 自動換行
+        press_words = press_text.split(' ')
+        press_lines = []
+        line = ''
+        for word in press_words:
+            test_line = (line + ' ' + word).strip()
+            (w, h), _ = cv2.getTextSize(test_line, self.font, press_scale, 3)
+            if w > content_w - 40 and line != '':
+                press_lines.append(line)
+                line = word
+            else:
+                line = test_line
+        if line:
+            press_lines.append(line)
+        # 計算總高度
+        total_press_height = 0
+        press_heights = []
+        for text in press_lines:
+            (w, h), _ = cv2.getTextSize(text, self.font, press_scale, 3)
+            press_heights.append(h + 8)
+            total_press_height += h + 8
+        # 最底部對齊
+        press_y = content_y + content_h - 30 - total_press_height + 8
+        for idx, text in enumerate(press_lines):
+            (w, h), _ = cv2.getTextSize(text, self.font, press_scale, 3)
+            press_x = content_x + (content_w - w) // 2
+            self.draw_text_with_outline(frame, text, (press_x, press_y + h), self.font, press_scale, (200,255,255), 3, outline_color=(0,0,0), outline_thickness=6)
+            press_y += press_heights[idx]
         cv2.imshow(WINDOW_NAME, frame)
         cv2.waitKey(0)
 
@@ -428,11 +572,11 @@ class TaikoDrum(GameBase):
         def draw_text_with_outline(img, text, pos, font, font_scale, color, thickness=3, outline_color=(0,0,0), outline_thickness=6):
             cv2.putText(img, text, pos, font, font_scale, outline_color, outline_thickness, cv2.LINE_AA)
             cv2.putText(img, text, pos, font, font_scale, color, thickness, cv2.LINE_AA)
-        # align main.py: font_scale=1.5, thickness=3
-        draw_text_with_outline(img, "1. Easy (Slow)", (360, 235), self.font, 1.0, (0,255,0), 3)
-        draw_text_with_outline(img, "2. Normal (Medium)", (360, 335), self.font, 1.0, (255,255,0), 3)
-        draw_text_with_outline(img, "3. Difficult (Fast)", (360, 435), self.font, 1.0, (255,0,0), 3)
-        draw_text_with_outline(img, "ESC to back", (100, 550), self.font, 1, (180,180,180), 2)
+        # y座標分別為265, 295, 525
+        draw_text_with_outline(img, "1. Easy (Slow)", (385, 265), self.font, 1.0, (0,255,0), 3)
+        draw_text_with_outline(img, "2. Normal (Medium)", (385, 395), self.font, 1.0, (255,255,0), 3)
+        draw_text_with_outline(img, "3. Difficult (Fast)", (385, 525), self.font, 1.0, (255,0,0), 3)
+        draw_text_with_outline(img, "ESC to back", (125, 650), self.font, 1, (180,180,180), 2)
         cv2.imshow(WINDOW_NAME, img)
 
     def show_music_menu(self):
@@ -445,9 +589,11 @@ class TaikoDrum(GameBase):
         def draw_text_with_outline(img, text, pos, font, font_scale, color, thickness=3, outline_color=(0,0,0), outline_thickness=6):
             cv2.putText(img, text, pos, font, font_scale, outline_color, outline_thickness, cv2.LINE_AA)
             cv2.putText(img, text, pos, font, font_scale, color, thickness, cv2.LINE_AA)
-        draw_text_with_outline(img, "1. Moon Heart", (360, 235), self.font, 1.0, (255,200,200), 3)
-        draw_text_with_outline(img, "2. Moonlight", (360, 335), self.font, 1.0, (200,200,255), 3)
-        draw_text_with_outline(img, "ESC to back", (100, 550), self.font, 1, (180,180,180), 2)
+        # y座標分別為265, 295, 525
+        draw_text_with_outline(img, "Song Select", (385, 265), self.font, 1.0, (255,255,255), 3)
+        draw_text_with_outline(img, "1. Moon Heart", (385, 395), self.font, 1.0, (255,200,200), 3)
+        draw_text_with_outline(img, "2. Moonlight", (385, 525), self.font, 1.0, (200,200,255), 3)
+        draw_text_with_outline(img, "ESC to back", (125, 650), self.font, 1, (180,180,180), 2)
         cv2.imshow(WINDOW_NAME, img)
 
     def show_crush_question(self):
@@ -460,10 +606,10 @@ class TaikoDrum(GameBase):
         def draw_text_with_outline(img, text, pos, font, font_scale, color, thickness=3, outline_color=(0,0,0), outline_thickness=6):
             cv2.putText(img, text, pos, font, font_scale, outline_color, outline_thickness, cv2.LINE_AA)
             cv2.putText(img, text, pos, font, font_scale, color, thickness, cv2.LINE_AA)
-        # 位置與 show_difficulty_menu 對齊
-        draw_text_with_outline(img, "Is your crush watching?", (360, 235), self.font, 1.0, (255,255,255), 3)
-        draw_text_with_outline(img, "1. Yes", (360, 335), self.font, 1.0, (255,255,0), 3)
-        draw_text_with_outline(img, "2. No", (360, 435), self.font, 1.0, (255,255,0), 3)
+        # y座標分別為265, 295, 525
+        draw_text_with_outline(img, "Crush watching?", (385, 265), self.font, 1.0, (255,255,255), 3)
+        draw_text_with_outline(img, "1. Yes", (385, 395), self.font, 1.0, (255,255,0), 3)
+        draw_text_with_outline(img, "2. No", (385, 525), self.font, 1.0, (255,255,0), 3)
         cv2.imshow(WINDOW_NAME, img)
 
     def main_loop(self):
@@ -517,10 +663,10 @@ class TaikoDrum(GameBase):
         while selecting_crush:
             self.show_crush_question()
             key = cv2.waitKey(10) & 0xFF
-            if key == ord('y') or key == ord('Y'):
+            if key == ord('1'):
                 self.crush_mode = True
                 selecting_crush = False
-            elif key == ord('n') or key == ord('N'):
+            elif key == ord('2'):
                 self.crush_mode = False
                 selecting_crush = False
             elif key == 27:  # ESC
@@ -546,38 +692,38 @@ class TaikoDrum(GameBase):
             # crush模式自動判定
             if self.crush_mode:
                 now = time.time()
+                bonus = self.get_bonus()
                 # 處理普通音符
                 for note in self.notes:
                     if note['type'] != 'roll' and not note.get('hit', False) and not note.get('miss', False):
                         dx = abs(note['x'] - self.judge_x)
                         if dx <= 15:
-                            # 自動判定perfect
                             note['hit'] = True
                             self.combo += 1
-                            self.score += 3
+                            self.score += 3 + bonus
                             self.last_combo_bonus = self.combo
                             self.judge_text = ("Perfect", (0,0,255), now + 0.5)
-                            # 播放音效（自動交替A/L）
                             if note['type'] == 'left':
-                                self.play_sound(self.adrum_sound, 0.1)
+                                self.play_sound(self.adrum_sound, 0.25)
                             else:
-                                self.play_sound(self.ldrum_sound, 0.1)
-                    # 處理roll音符
+                                self.play_sound(self.ldrum_sound, 0.25)
                     if note['type'] == 'roll' and note.get('roll_active', False):
-                        # 每0.1秒自動交替A/L
-                        if now - auto_roll_last > 0.1:
-                            note['roll_hits'] += 1
-                            self.combo += 1
-                            self.score += 3
-                            self.last_combo_bonus = self.combo
-                            self.judge_text = ("Perfect", (0,0,255), now + 0.2)
-                            if auto_roll_key == 'a':
-                                self.play_sound(self.adrum_sound, 1.0)
-                                auto_roll_key = 'l'
-                            else:
-                                self.play_sound(self.ldrum_sound, 1.0)
-                                auto_roll_key = 'a'
-                            auto_roll_last = now
+                        roll_left = min(note['x'], note['end_x'])
+                        roll_right = max(note['x'], note['end_x'])
+                        if roll_left - 45 <= self.judge_x <= roll_right + 45:
+                            if now - auto_roll_last > 0.1:
+                                note['roll_hits'] += 1
+                                self.combo += 1
+                                self.score += 3 + bonus
+                                self.last_combo_bonus = self.combo
+                                self.judge_text = ("Perfect", (0,0,255), now + 0.2)
+                                if auto_roll_key == 'a':
+                                    self.play_sound(self.adrum_sound, 0.25)
+                                    auto_roll_key = 'l'
+                                else:
+                                    self.play_sound(self.ldrum_sound, 0.25)
+                                    auto_roll_key = 'a'
+                                auto_roll_last = now
             self.render()
             if self.combo > getattr(self, 'max_combo', 0):
                 self.max_combo = self.combo
