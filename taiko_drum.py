@@ -460,9 +460,10 @@ class TaikoDrum(GameBase):
         def draw_text_with_outline(img, text, pos, font, font_scale, color, thickness=3, outline_color=(0,0,0), outline_thickness=6):
             cv2.putText(img, text, pos, font, font_scale, outline_color, outline_thickness, cv2.LINE_AA)
             cv2.putText(img, text, pos, font, font_scale, color, thickness, cv2.LINE_AA)
-        # 位置與 show_music_menu 對齊
+        # 位置與 show_difficulty_menu 對齊
         draw_text_with_outline(img, "Is your crush watching?", (360, 235), self.font, 1.0, (255,255,255), 3)
-        draw_text_with_outline(img, "Y / N", (360, 335), self.font, 1.0, (255,255,0), 3)
+        draw_text_with_outline(img, "1. Yes", (360, 335), self.font, 1.0, (255,255,0), 3)
+        draw_text_with_outline(img, "2. No", (360, 435), self.font, 1.0, (255,255,0), 3)
         cv2.imshow(WINDOW_NAME, img)
 
     def main_loop(self):
