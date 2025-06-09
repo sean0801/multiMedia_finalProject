@@ -483,7 +483,7 @@ class TaikoDrum(GameBase):
                 selecting_difficulty = False
             elif key == ord('3'):
                 self.note_speed = 7
-                self.group_interval = 1.5
+                self.group_interval = 1.2
                 selecting_difficulty = False
         # 新增：音樂選擇
         selecting_music = True
