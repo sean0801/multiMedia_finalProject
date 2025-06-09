@@ -115,6 +115,7 @@ def main_loop():
     global current_game
     pressed_keys = set()  # 追蹤目前按下的 key
     while True:
+
         if current_game is None:
             show_lobby()
         else:
@@ -145,8 +146,8 @@ def main_loop():
             if current_game is None:
                 break  # 在大廳按 ESC，離開程式
             else:
-                if hasattr(current_game, "stop_music"):
-                    current_game.stop_music()
+                if current_game == games["1. Whac-A-Mole"]:
+                    pygame.mixer.music.stop()
                 # 在遊戲中按 ESC，返回大廳
                 # 清理鋼琴遊戲可能殘留的按鍵狀態
                 if current_game == games["3. 12-Key Piano"] and pressed_keys:
@@ -215,7 +216,7 @@ def main_loop():
                         pressed_keys.discard(k)
 
     # --- 程式結束前的清理 ---
-    pygame.quit()  # 正常關閉  Pygame
+    pygame.quit()  # 正常關閉 Pygame
     cv2.destroyAllWindows()
 
 
